@@ -15,9 +15,11 @@ You are delegating a task to another Claude Code instance running in a TMUX pane
    tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid}'
    ```
 
-2. Identify your own pane:
+2. Identify your own pane and load project context:
    ```bash
    MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
+   RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+   source "${RUNTIME_DIR}/session.env"
    ```
 
 3. Ask the user:
@@ -31,8 +33,8 @@ You are delegating a task to another Claude Code instance running in a TMUX pane
 
    **IMPORTANT**: If the prompt is long or contains special characters, write it to a temp file first and use `tmux load-buffer` + `tmux paste-buffer`:
    ```bash
-   mkdir -p /tmp/claude-team
-   TASKFILE=$(mktemp /tmp/claude-team/task_XXXXXX.txt)
+   mkdir -p "${RUNTIME_DIR}"
+   TASKFILE=$(mktemp "${RUNTIME_DIR}/task_XXXXXX.txt")
    cat > "$TASKFILE" << 'TASK'
    $TASK_PROMPT
    TASK

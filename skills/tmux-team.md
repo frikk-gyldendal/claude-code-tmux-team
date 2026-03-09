@@ -10,9 +10,11 @@ You are showing the team overview of all Claude Code instances running in TMUX.
 
 ### Steps
 
-1. Identify yourself:
+1. Identify yourself and load project context:
    ```bash
    MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
+   RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+   source "${RUNTIME_DIR}/session.env"
    ```
 
 2. List all panes with details:
@@ -22,7 +24,7 @@ You are showing the team overview of all Claude Code instances running in TMUX.
 
 3. Check for status files:
    ```bash
-   for f in /tmp/claude-team/status/*.status; do
+   for f in "${RUNTIME_DIR}"/status/*.status; do
      [ -f "$f" ] && cat "$f" && echo "---"
    done
    ```
@@ -31,7 +33,7 @@ You are showing the team overview of all Claude Code instances running in TMUX.
    ```bash
    for pane in $(tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index}'); do
      PANE_SAFE=${pane//[:.]/_}
-     COUNT=$(ls /tmp/claude-team/messages/${PANE_SAFE}_*.msg 2>/dev/null | wc -l)
+     COUNT=$(ls "${RUNTIME_DIR}/messages/${PANE_SAFE}_"*.msg 2>/dev/null | wc -l)
      echo "$pane: $COUNT unread messages"
    done
    ```

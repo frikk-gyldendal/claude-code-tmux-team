@@ -10,23 +10,25 @@ You are checking your inbox for messages from other Claude Code instances in TMU
 
 ### Steps
 
-1. Identify your pane:
+1. Identify your pane and load project context:
    ```bash
    MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
    MY_PANE_SAFE=${MY_PANE//[:.]/_}
+   RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+   source "${RUNTIME_DIR}/session.env"
    ```
 
 2. List and read all messages addressed to you:
    ```bash
-   ls -t /tmp/claude-team/messages/${MY_PANE_SAFE}_*.msg 2>/dev/null
+   ls -t "${RUNTIME_DIR}/messages/${MY_PANE_SAFE}_"*.msg 2>/dev/null
    ```
 
 3. For each message file found, read it and display it to the user.
 
 4. After reading, archive the messages:
    ```bash
-   mkdir -p /tmp/claude-team/messages/archive
-   mv /tmp/claude-team/messages/${MY_PANE_SAFE}_*.msg /tmp/claude-team/messages/archive/ 2>/dev/null
+   mkdir -p "${RUNTIME_DIR}/messages/archive"
+   mv "${RUNTIME_DIR}/messages/${MY_PANE_SAFE}_"*.msg "${RUNTIME_DIR}/messages/archive/" 2>/dev/null
    ```
 
 5. If no messages found, tell the user the inbox is empty.

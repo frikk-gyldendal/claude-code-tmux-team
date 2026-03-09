@@ -10,10 +10,11 @@ You are monitoring the status of all Claude Code worker instances in TMUX.
 
 ### Read Project Context
 
-First, source the session manifest to get project-aware values:
+First, discover the runtime directory and source the session manifest:
 
 ```bash
-source /tmp/claude-team/session.env 2>/dev/null
+RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+source "${RUNTIME_DIR}/session.env"
 ```
 
 This gives you:
@@ -21,13 +22,14 @@ This gives you:
 - `WORKER_PANES` — comma-separated worker pane indices (e.g., "1,2,3,4,5,7,8,9,10,11")
 - `WORKER_COUNT`, `WATCHDOG_PANE`, `TOTAL_PANES`, `PROJECT_NAME`, `PROJECT_DIR`
 
-If the manifest is missing, fall back to `SESSION_NAME=claude-team` and panes `seq 2 11`.
+If the manifest is missing, fall back by detecting session name from tmux: `SESSION=$(tmux display-message -p '#S')`.
 
 ### Quick Status Check (all workers)
 
 ```bash
-source /tmp/claude-team/session.env 2>/dev/null
-SESSION="${SESSION_NAME:-claude-team}"
+RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+source "${RUNTIME_DIR}/session.env"
+SESSION="${SESSION_NAME}"
 PANES="${WORKER_PANES:-2,3,4,5,6,7,8,9,10,11}"
 for i in $(echo "$PANES" | tr ',' ' '); do
   echo "=== Worker 0.$i ==="
@@ -68,8 +70,9 @@ W6     ⬚ IDLE   -                          -
 If the user asks to inspect a specific worker, capture more lines:
 
 ```bash
-source /tmp/claude-team/session.env 2>/dev/null
-tmux capture-pane -t "${SESSION_NAME:-claude-team}:0.X" -p -S -80
+RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+source "${RUNTIME_DIR}/session.env"
+tmux capture-pane -t "${SESSION_NAME}:0.X" -p -S -80
 ```
 
 This shows the full recent history — useful for debugging errors or reviewing completed work.
@@ -88,7 +91,7 @@ If waiting for workers to finish, use this polling pattern:
 
 When a worker shows ERROR state:
 
-1. Capture full output: `tmux capture-pane -t "${SESSION_NAME:-claude-team}:0.X" -p -S -80`
+1. Capture full output: `tmux capture-pane -t "${SESSION_NAME}:0.X" -p -S -80`
 2. Identify the error type:
    - **Edit conflict** (line numbers shifted) — worker usually auto-retries
    - **File not found** — bad path in task prompt, fix and re-dispatch

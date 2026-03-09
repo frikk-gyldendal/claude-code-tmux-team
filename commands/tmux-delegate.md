@@ -10,8 +10,10 @@ You are delegating a task to another Claude Code instance running in a TMUX pane
 
 ### Steps
 
-1. List available panes:
+1. Discover runtime directory and list available panes:
    ```bash
+   RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+   source "${RUNTIME_DIR}/session.env"
    tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid}'
    ```
 
@@ -37,8 +39,8 @@ You are delegating a task to another Claude Code instance running in a TMUX pane
 
    **IMPORTANT**: If the prompt is long or contains special characters, write it to a temp file first and use `tmux load-buffer` + `tmux paste-buffer`:
    ```bash
-   mkdir -p /tmp/claude-team
-   TASKFILE=$(mktemp /tmp/claude-team/task_XXXXXX.txt)
+   mkdir -p "${RUNTIME_DIR}"
+   TASKFILE=$(mktemp "${RUNTIME_DIR}/task_XXXXXX.txt")
    cat > "$TASKFILE" << 'TASK'
    $TASK_PROMPT
    TASK

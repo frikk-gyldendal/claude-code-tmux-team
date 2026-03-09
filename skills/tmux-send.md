@@ -15,8 +15,10 @@ You are sending a message to another Claude Code instance running in a TMUX pane
    tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid}'
    ```
 
-2. Identify your own pane:
+2. Identify your own pane and load project context:
    ```bash
+   RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+   source "${RUNTIME_DIR}/session.env"
    tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}'
    ```
 
@@ -26,7 +28,7 @@ You are sending a message to another Claude Code instance running in a TMUX pane
    ```bash
    TIMESTAMP=$(date +%s%N)
    FROM=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
-   cat > "/tmp/claude-team/messages/${TARGET_PANE//[:.]/_}_${TIMESTAMP}.msg" <<EOF
+   cat > "${RUNTIME_DIR}/messages/${TARGET_PANE//[:.]/_}_${TIMESTAMP}.msg" <<EOF
    FROM: $FROM
    TO: $TARGET_PANE
    TIME: $(date -Iseconds)

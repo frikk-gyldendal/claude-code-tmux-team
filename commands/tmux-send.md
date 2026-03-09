@@ -10,8 +10,9 @@ You are sending a message to another Claude Code instance running in a TMUX pane
 
 ### Steps
 
-1. First, list available panes to find targets:
+1. Discover runtime directory and list available panes:
    ```bash
+   RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
    tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid}'
    ```
 
@@ -26,7 +27,7 @@ You are sending a message to another Claude Code instance running in a TMUX pane
    ```bash
    TIMESTAMP=$(date +%s%N)
    FROM=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
-   cat > "/tmp/claude-team/messages/${TARGET_PANE//[:.]/_}_${TIMESTAMP}.msg" <<EOF
+   cat > "${RUNTIME_DIR}/messages/${TARGET_PANE//[:.]/_}_${TIMESTAMP}.msg" <<EOF
    FROM: $FROM
    TO: $TARGET_PANE
    TIME: $(date -Iseconds)

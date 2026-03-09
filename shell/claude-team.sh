@@ -254,9 +254,11 @@ TOTAL_PANES=$total
 WORKER_COUNT=$worker_count
 WATCHDOG_PANE=$watchdog_pane
 WORKER_PANES=$worker_panes_csv
+RUNTIME_DIR=${runtime_dir}
 MANIFEST
 
   tmux new-session -d -s "$session" -c "$dir"
+  tmux set-environment -t "$session" CLAUDE_TEAM_RUNTIME "${runtime_dir}"
   step_done
 
   # ── Step 2: Apply theme ────────────────────────────────────────
@@ -285,6 +287,10 @@ MANIFEST
   tmux set-option -t "$session" window-status-format '#[fg=colour245] #I #W '
   tmux set-option -t "$session" window-status-current-format '#[fg=cyan,bold] #I #W '
   tmux set-option -t "$session" message-style 'bg=colour233,fg=cyan'
+
+  # Terminal tab/window title — shows project name in macOS Terminal tabs
+  tmux set-option -t "$session" set-titles on
+  tmux set-option -t "$session" set-titles-string "🤖 #{session_name} — #{pane_title}"
 
   step_done
 

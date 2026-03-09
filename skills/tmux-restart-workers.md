@@ -10,16 +10,17 @@ You are restarting all Claude Code instances in the tmux team EXCEPT the Manager
 
 ### Steps
 
-1. **Read Project Context** — source the session manifest to get dynamic values:
+1. **Read Project Context** — load the runtime directory and source the session manifest:
    ```bash
-   cat /tmp/claude-team/session.env
+   RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+   source "${RUNTIME_DIR}/session.env"
    ```
-   Extract these variables for use in all subsequent commands:
+   This gives you all dynamic values. Extract what you need:
    ```bash
-   SESSION=$(grep '^SESSION_NAME=' /tmp/claude-team/session.env | cut -d= -f2)
-   WD_PANE=$(grep '^WATCHDOG_PANE=' /tmp/claude-team/session.env | cut -d= -f2)
-   WORKER_PANES=$(grep '^WORKER_PANES=' /tmp/claude-team/session.env | cut -d= -f2)
-   TOTAL_PANES=$(grep '^TOTAL_PANES=' /tmp/claude-team/session.env | cut -d= -f2)
+   SESSION="$SESSION_NAME"
+   WD_PANE="$WATCHDOG_PANE"
+   # WORKER_PANES is already set (comma-separated)
+   # TOTAL_PANES is already set
    ```
    Use `$SESSION` for all tmux `-t` targets below. Use `$WD_PANE` for the Watchdog pane index. Use `$WORKER_PANES` (comma-separated) for all worker pane loops.
 

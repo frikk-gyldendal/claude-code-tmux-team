@@ -10,10 +10,12 @@ You are broadcasting a message to all other Claude Code instances in your TMUX s
 
 ### Steps
 
-1. Identify yourself:
+1. Identify yourself and load project context:
    ```bash
    MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
    MY_SESSION=$(tmux display-message -p '#{session_name}')
+   RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+   source "${RUNTIME_DIR}/session.env"
    ```
 
 2. Ask the user for the broadcast message (if not already provided).
@@ -21,7 +23,7 @@ You are broadcasting a message to all other Claude Code instances in your TMUX s
 3. Write a broadcast file:
    ```bash
    TIMESTAMP=$(date +%s%N)
-   cat > "/tmp/claude-team/broadcasts/${TIMESTAMP}.broadcast" <<EOF
+   cat > "${RUNTIME_DIR}/broadcasts/${TIMESTAMP}.broadcast" <<EOF
    FROM: $MY_PANE
    TIME: $(date -Iseconds)
    ---
@@ -35,7 +37,7 @@ You are broadcasting a message to all other Claude Code instances in your TMUX s
      if [ "$pane" != "$MY_PANE" ]; then
        # Also write a per-pane message so they see it in inbox
        PANE_SAFE=${pane//[:.]/_}
-       cp "/tmp/claude-team/broadcasts/${TIMESTAMP}.broadcast" "/tmp/claude-team/messages/${PANE_SAFE}_${TIMESTAMP}.msg"
+       cp "${RUNTIME_DIR}/broadcasts/${TIMESTAMP}.broadcast" "${RUNTIME_DIR}/messages/${PANE_SAFE}_${TIMESTAMP}.msg"
        tmux send-keys -t "$pane" "/tmux-inbox" Enter
      fi
    done

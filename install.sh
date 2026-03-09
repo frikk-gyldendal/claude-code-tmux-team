@@ -71,10 +71,14 @@ printf "  ${BRAND}[1/4]${RESET} Creating directories..."
 {
   mkdir -p ~/.claude/agents
   mkdir -p ~/.claude/commands
+  mkdir -p ~/.claude/claude-team
   mkdir -p ~/.claude/agent-memory/tmux-manager
   mkdir -p ~/.claude/agent-memory/tmux-watchdog
   mkdir -p ~/.local/bin
 } && step_ok || { step_fail; die "Failed to create directories."; }
+
+# Save repo location so /tmux-reinstall can find it later
+echo "$SCRIPT_DIR" > ~/.claude/claude-team/repo-path
 
 # ── Step 2: Agent definitions ─────────────────────────────────────────
 AGENT_COUNT=$(find "$SCRIPT_DIR/agents" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')

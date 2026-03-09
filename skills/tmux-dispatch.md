@@ -13,17 +13,18 @@ You are dispatching tasks to Claude Code worker instances in TMUX panes.
 **Before dispatching any tasks**, read the session manifest to get project info and session config:
 
 ```bash
-source /tmp/claude-team/session.env
+RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+source "${RUNTIME_DIR}/session.env"
 ```
 
 This gives you:
-- `SESSION_NAME` — tmux session name (use instead of hardcoded "claude-team")
+- `SESSION_NAME` — tmux session name (use instead of hardcoded session names)
 - `PROJECT_DIR` — absolute path to the project directory
 - `PROJECT_NAME` — human-readable project name
 - `WORKER_PANES` — list of worker pane IDs
 - `WATCHDOG_PANE` — the watchdog pane ID
 
-**Always use `${SESSION_NAME}` in all tmux commands** — never hardcode "claude-team".
+**Always use `${SESSION_NAME}` in all tmux commands** — never hardcode a session name.
 
 ### Reliable Dispatch Function
 
@@ -31,17 +32,18 @@ This gives you:
 
 ```bash
 # 0. Load session config
-source /tmp/claude-team/session.env
+RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+source "${RUNTIME_DIR}/session.env"
 
 # 1. Rename the worker pane so the task is visible at a glance
 tmux send-keys -t "${SESSION_NAME}:0.X" "/rename short-task-name" Enter
 sleep 1
 
-# 2. Ensure temp dir exists
-mkdir -p /tmp/claude-team
+# 2. Ensure runtime dir exists
+mkdir -p "${RUNTIME_DIR}"
 
 # 3. Write task to temp file (avoids escaping issues)
-TASKFILE=$(mktemp /tmp/claude-team/task_XXXXXX.txt)
+TASKFILE=$(mktemp "${RUNTIME_DIR}/task_XXXXXX.txt")
 cat > "$TASKFILE" << TASK
 You are a worker on the Claude Team for project: ${PROJECT_NAME}
 Project directory: ${PROJECT_DIR}
@@ -98,11 +100,12 @@ Each Bash call should contain the full dispatch sequence for one worker (includi
 
 ```bash
 # Worker A — all in one Bash call
-source /tmp/claude-team/session.env
+RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+source "${RUNTIME_DIR}/session.env"
 tmux send-keys -t "${SESSION_NAME}:0.2" "/rename task-a-name" Enter
 sleep 1
-mkdir -p /tmp/claude-team
-TASKFILE=$(mktemp /tmp/claude-team/task_XXXXXX.txt)
+mkdir -p "${RUNTIME_DIR}"
+TASKFILE=$(mktemp "${RUNTIME_DIR}/task_XXXXXX.txt")
 cat > "$TASKFILE" << TASK
 You are a worker on the Claude Team for project: ${PROJECT_NAME}
 Project directory: ${PROJECT_DIR}
@@ -119,11 +122,12 @@ rm "$TASKFILE"
 
 ```bash
 # Worker B — separate Bash call, runs in parallel
-source /tmp/claude-team/session.env
+RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+source "${RUNTIME_DIR}/session.env"
 tmux send-keys -t "${SESSION_NAME}:0.3" "/rename task-b-name" Enter
 sleep 1
-mkdir -p /tmp/claude-team
-TASKFILE=$(mktemp /tmp/claude-team/task_XXXXXX.txt)
+mkdir -p "${RUNTIME_DIR}"
+TASKFILE=$(mktemp "${RUNTIME_DIR}/task_XXXXXX.txt")
 cat > "$TASKFILE" << TASK
 You are a worker on the Claude Team for project: ${PROJECT_NAME}
 Project directory: ${PROJECT_DIR}
@@ -157,7 +161,7 @@ This works because `send-keys` with a non-empty string + Enter is reliable. The 
 5. **Never touch pane 0.1** — that's the Watchdog
 6. **Workers are 0.2 through 0.11** — 10 workers max
 7. **Always include project context in every task prompt** — workers need to know the project name, directory, and that paths should be absolute
-8. **Read the manifest first** — `source /tmp/claude-team/session.env` before dispatching
+8. **Read the manifest first** — load `${RUNTIME_DIR}/session.env` before dispatching
 
 ### Troubleshooting
 

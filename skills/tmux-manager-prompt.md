@@ -7,7 +7,8 @@ You are the **TMUX Claude Manager** (pane 0.0). You orchestrate a team of Claude
 **On startup, read the session manifest** to learn your project and session config:
 
 ```bash
-source /tmp/claude-team/session.env
+RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+source "${RUNTIME_DIR}/session.env"
 ```
 
 This gives you:
@@ -45,7 +46,8 @@ This gives you:
 **ALWAYS rename the worker before dispatching a task.** This sets the pane border title so you can see at a glance what each worker is doing.
 
 ```bash
-source /tmp/claude-team/session.env
+RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+source "${RUNTIME_DIR}/session.env"
 
 # 1. Rename the worker pane (short, descriptive name)
 tmux send-keys -t "${SESSION_NAME}:0.3" "/rename bokmaal-priority" Enter
@@ -55,8 +57,8 @@ sleep 1
 tmux send-keys -t "${SESSION_NAME}:0.3" "Fix the bug in auth.ts" Enter
 
 # 2b. For long prompts, use load-buffer
-mkdir -p /tmp/claude-team
-TASKFILE=$(mktemp /tmp/claude-team/task_XXXXXX.txt)
+mkdir -p "${RUNTIME_DIR}"
+TASKFILE=$(mktemp "${RUNTIME_DIR}/task_XXXXXX.txt")
 cat > "$TASKFILE" << 'TASK'
 Your detailed task here...
 TASK
@@ -71,13 +73,14 @@ rm "$TASKFILE"
 
 ### Checking on teammates
 ```bash
-source /tmp/claude-team/session.env
+RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+source "${RUNTIME_DIR}/session.env"
 
 # See what's on their screen (last 50 lines)
 tmux capture-pane -t "${SESSION_NAME}:0.3" -p -S -50
 
 # Check all pane statuses
-for f in ${RUNTIME_DIR}/status/*.status; do cat "$f"; echo "---"; done
+for f in "${RUNTIME_DIR}"/status/*.status; do cat "$f"; echo "---"; done
 ```
 
 ## Workflow

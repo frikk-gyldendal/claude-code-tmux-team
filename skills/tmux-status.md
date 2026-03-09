@@ -10,10 +10,12 @@ You are managing status updates across Claude Code instances in TMUX.
 
 ### Steps
 
-1. Identify yourself:
+1. Identify yourself and load project context:
    ```bash
    MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
    MY_PANE_SAFE=${MY_PANE//[:.]/_}
+   RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
+   source "${RUNTIME_DIR}/session.env"
    ```
 
 2. Ask the user: **set** your status or **view** all statuses?
@@ -21,7 +23,7 @@ You are managing status updates across Claude Code instances in TMUX.
 ### Setting status
 Write your current status:
 ```bash
-cat > "/tmp/claude-team/status/${MY_PANE_SAFE}.status" <<EOF
+cat > "${RUNTIME_DIR}/status/${MY_PANE_SAFE}.status" <<EOF
 PANE: $MY_PANE
 UPDATED: $(date -Iseconds)
 STATUS: $STATUS_TEXT
@@ -32,7 +34,7 @@ EOF
 ### Viewing statuses
 Read all status files:
 ```bash
-for f in /tmp/claude-team/status/*.status; do
+for f in "${RUNTIME_DIR}"/status/*.status; do
   echo "---"
   cat "$f"
 done
