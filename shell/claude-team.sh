@@ -353,7 +353,7 @@ MANIFEST
 
   # Launch Watchdog (pane 0.$watchdog_pane)
   tmux send-keys -t "$session:0.$watchdog_pane" \
-    "claude --dangerously-skip-permissions --agent tmux-watchdog" Enter
+    "claude --dangerously-skip-permissions --model haiku --agent tmux-watchdog" Enter
   sleep 0.5
 
   # Auto-start the watchdog loop
