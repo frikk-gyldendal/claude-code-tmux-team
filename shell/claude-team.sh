@@ -379,7 +379,7 @@ MANIFEST
     printf "\r   ${DIM}[6/${STEP_TOTAL}]${RESET} Booting workers  ${BRAND}${bar}${RESET}  ${BOLD}${booted}${RESET}${DIM}/${worker_count}${RESET}  "
 
     tmux send-keys -t "$session:0.$i" \
-      "claude --dangerously-skip-permissions" Enter
+      "claude --dangerously-skip-permissions --model opus" Enter
     sleep 0.3
   done
   printf "${SUCCESS}done${RESET}\n"
