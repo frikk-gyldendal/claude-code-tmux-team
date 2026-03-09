@@ -40,9 +40,11 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$HOME/.local/bin"; then
 fi
 
 echo ""
-echo "Done! Start the team with:"
-echo "  claude-team          # in current directory, default 6x2 grid"
-echo "  claude-team 4x3      # custom grid"
+echo "Done! Quick start:"
 echo ""
-echo "Optional: Add project-level commands by copying commands/ to your project:"
-echo "  cp -r $SCRIPT_DIR/commands/ <your-project>/.claude/commands/"
+echo "  cd /path/to/your/project"
+echo "  claude-team init       # register your project (one-time)"
+echo "  claude-team            # launch the team"
+echo ""
+echo "Or just run 'claude-team' anywhere to see the project picker."
+echo ""

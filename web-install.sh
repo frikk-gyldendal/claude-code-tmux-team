@@ -11,6 +11,7 @@ echo ""
 
 # Create directories
 mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/agent-memory/tmux-manager ~/.claude/agent-memory/tmux-watchdog
+mkdir -p ~/.local/bin
 
 # ── Agents ────────────────────────────────────────────────────────────
 
@@ -202,7 +203,6 @@ Progress:
 Waiting on W3...
 ```
 AGENT_MANAGER_EOF
-echo "    ✓ tmux-manager"
 
 cat > ~/.claude/agents/tmux-watchdog.md << 'AGENT_WATCHDOG_EOF'
 ---
@@ -302,116 +302,12 @@ When asked for status or when stopping, provide a summary:
 - Be resilient to panes appearing/disappearing (windows/panes may be created or destroyed)
 - If tmux is not running or no session is found, report this clearly and wait for guidance
 AGENT_WATCHDOG_EOF
-echo "    ✓ tmux-watchdog"
 
-# ── Skills ────────────────────────────────────────────────────────────
+echo "  ✓ 2 agents installed"
+
+# ── Skills ─────────────────────────────────────────────────────────────
 
 echo "  Installing skills..."
-
-cat > ~/.claude/skills/tmux-broadcast.md << 'SKILL_BROADCAST_EOF'
-# Skill: tmux-broadcast
-
-Broadcast a message to ALL other Claude instances in TMUX.
-
-## Usage
-`/tmux-broadcast`
-
-## Prompt
-You are broadcasting a message to all other Claude Code instances in your TMUX session.
-
-### Steps
-
-1. Identify yourself:
-   ```bash
-   MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
-   MY_SESSION=$(tmux display-message -p '#{session_name}')
-   ```
-
-2. Ask the user for the broadcast message (if not already provided).
-
-3. Write a broadcast file:
-   ```bash
-   TIMESTAMP=$(date +%s%N)
-   cat > "/tmp/claude-team/broadcasts/${TIMESTAMP}.broadcast" <<EOF
-   FROM: $MY_PANE
-   TIME: $(date -Iseconds)
-   ---
-   $MESSAGE
-   EOF
-   ```
-
-4. Send the `/tmux-inbox-broadcast` trigger to every OTHER pane in the session:
-   ```bash
-   for pane in $(tmux list-panes -s -t "$MY_SESSION" -F '#{session_name}:#{window_index}.#{pane_index}'); do
-     if [ "$pane" != "$MY_PANE" ]; then
-       # Also write a per-pane message so they see it in inbox
-       PANE_SAFE=${pane//[:.]/_}
-       cp "/tmp/claude-team/broadcasts/${TIMESTAMP}.broadcast" "/tmp/claude-team/messages/${PANE_SAFE}_${TIMESTAMP}.msg"
-       tmux send-keys -t "$pane" "/tmux-inbox" Enter
-     fi
-   done
-   ```
-
-This notifies all other panes to check their inbox.
-SKILL_BROADCAST_EOF
-echo "    ✓ tmux-broadcast"
-
-cat > ~/.claude/skills/tmux-delegate.md << 'SKILL_DELEGATE_EOF'
-# Skill: tmux-delegate
-
-Delegate a task to another Claude instance by sending it a prompt.
-
-## Usage
-`/tmux-delegate`
-
-## Prompt
-You are delegating a task to another Claude Code instance running in a TMUX pane.
-
-### Steps
-
-1. List available panes:
-   ```bash
-   tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid}'
-   ```
-
-2. Identify your own pane:
-   ```bash
-   MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
-   ```
-
-3. Ask the user:
-   - Which pane to delegate to (if not specified)
-   - What task/prompt to send
-
-4. Send the task directly as keystrokes to the target pane:
-   ```bash
-   tmux send-keys -t "$TARGET_PANE" "$TASK_PROMPT" Enter
-   ```
-
-   **IMPORTANT**: If the prompt is long or contains special characters, write it to a temp file first and use `tmux load-buffer` + `tmux paste-buffer`:
-   ```bash
-   mkdir -p /tmp/claude-team
-   TASKFILE=$(mktemp /tmp/claude-team/task_XXXXXX.txt)
-   cat > "$TASKFILE" << 'TASK'
-   $TASK_PROMPT
-   TASK
-   tmux load-buffer "$TASKFILE"
-   tmux paste-buffer -t "$TARGET_PANE"
-   sleep 0.5
-   tmux send-keys -t "$TARGET_PANE" Enter
-   rm "$TASKFILE"
-   ```
-
-   **CRITICAL**: Never use `send-keys "" Enter` (empty string before Enter) — it swallows the keystroke. Always use bare `Enter` after a `sleep 0.5`.
-
-5. Confirm to the user that the task was sent and which pane received it.
-
-### Notes
-- The target Claude will receive this as user input in its conversation
-- You can check on their progress later with `/tmux-status`
-- The target instance must be idle (waiting for input) for this to work
-SKILL_DELEGATE_EOF
-echo "    ✓ tmux-delegate"
 
 cat > ~/.claude/skills/tmux-dispatch.md << 'SKILL_DISPATCH_EOF'
 # Skill: tmux-dispatch
@@ -536,115 +432,62 @@ If a task doesn't start after dispatch:
 2. If text is there but not submitted: `tmux send-keys -t claude-team:0.X Enter`
 3. If text is garbled: the pane might have been busy. Wait for idle, then retry.
 SKILL_DISPATCH_EOF
-echo "    ✓ tmux-dispatch"
 
-cat > ~/.claude/skills/tmux-inbox.md << 'SKILL_INBOX_EOF'
-# Skill: tmux-inbox
+cat > ~/.claude/skills/tmux-delegate.md << 'SKILL_DELEGATE_EOF'
+# Skill: tmux-delegate
 
-Check and read messages from other Claude instances.
+Delegate a task to another Claude instance by sending it a prompt.
 
 ## Usage
-`/tmux-inbox`
+`/tmux-delegate`
 
 ## Prompt
-You are checking your inbox for messages from other Claude Code instances in TMUX.
+You are delegating a task to another Claude Code instance running in a TMUX pane.
 
 ### Steps
 
-1. Identify your pane:
+1. List available panes:
+   ```bash
+   tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid}'
+   ```
+
+2. Identify your own pane:
    ```bash
    MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
-   MY_PANE_SAFE=${MY_PANE//[:.]/_}
    ```
 
-2. List and read all messages addressed to you:
+3. Ask the user:
+   - Which pane to delegate to (if not specified)
+   - What task/prompt to send
+
+4. Send the task directly as keystrokes to the target pane:
    ```bash
-   ls -t /tmp/claude-team/messages/${MY_PANE_SAFE}_*.msg 2>/dev/null
+   tmux send-keys -t "$TARGET_PANE" "$TASK_PROMPT" Enter
    ```
 
-3. For each message file found, read it and display it to the user.
-
-4. After reading, archive the messages:
+   **IMPORTANT**: If the prompt is long or contains special characters, write it to a temp file first and use `tmux load-buffer` + `tmux paste-buffer`:
    ```bash
-   mkdir -p /tmp/claude-team/messages/archive
-   mv /tmp/claude-team/messages/${MY_PANE_SAFE}_*.msg /tmp/claude-team/messages/archive/ 2>/dev/null
+   mkdir -p /tmp/claude-team
+   TASKFILE=$(mktemp /tmp/claude-team/task_XXXXXX.txt)
+   cat > "$TASKFILE" << 'TASK'
+   $TASK_PROMPT
+   TASK
+   tmux load-buffer "$TASKFILE"
+   tmux paste-buffer -t "$TARGET_PANE"
+   sleep 0.5
+   tmux send-keys -t "$TARGET_PANE" Enter
+   rm "$TASKFILE"
    ```
 
-5. If no messages found, tell the user the inbox is empty.
+   **CRITICAL**: Never use `send-keys "" Enter` (empty string before Enter) — it swallows the keystroke. Always use bare `Enter` after a `sleep 0.5`.
 
-6. If a message requires a response, ask the user if they want to reply using `/tmux-send`.
-SKILL_INBOX_EOF
-echo "    ✓ tmux-inbox"
+5. Confirm to the user that the task was sent and which pane received it.
 
-cat > ~/.claude/skills/tmux-manager-prompt.md << 'SKILL_MANAGER_PROMPT_EOF'
-# TMUX Claude Manager System Prompt
-
-You are the **TMUX Claude Manager** (pane 0.0). You orchestrate a team of Claude Code instances running in parallel TMUX panes.
-
-## Your Role
-- You are the coordinator. You assign tasks, check progress, and collect results.
-- You do NOT do implementation work yourself — you delegate to teammates.
-- You maintain awareness of what each pane is working on.
-
-## Communication System
-
-### Message Bus: `/tmp/claude-team/`
-- `messages/` — per-pane message files (named `{pane_safe}_{timestamp}.msg`)
-- `broadcasts/` — broadcast history
-- `status/` — per-pane status files
-
-### Available Skills
-- `/tmux-team` — View all instances, their status, and unread messages
-- `/tmux-send` — Send a direct message to a specific pane
-- `/tmux-broadcast` — Broadcast to all panes
-- `/tmux-delegate` — Send a task/prompt directly to another Claude's input
-- `/tmux-status` — Set/view status across instances
-- `/tmux-inbox` — Check your own inbox
-
-### Sending tasks to teammates
-To assign work to a pane, use `tmux send-keys`:
-```bash
-# For short prompts (< 200 chars, no special chars)
-tmux send-keys -t "claude-team:0.3" "Fix the bug in auth.ts" Enter
-
-# For long prompts, use load-buffer
-mkdir -p /tmp/claude-team
-TASKFILE=$(mktemp /tmp/claude-team/task_XXXXXX.txt)
-cat > "$TASKFILE" << 'TASK'
-Your detailed task here...
-TASK
-tmux load-buffer "$TASKFILE"
-tmux paste-buffer -t "claude-team:0.3"
-sleep 0.5
-tmux send-keys -t "claude-team:0.3" Enter
-rm "$TASKFILE"
-```
-
-**CRITICAL**: Never use `send-keys "" Enter` — the empty string swallows the Enter. Always use bare `Enter` after `sleep 0.5`.
-
-### Checking on teammates
-```bash
-# See what's on their screen (last 50 lines)
-tmux capture-pane -t "claude-team:0.3" -p -S -50
-
-# Check all pane statuses
-for f in /tmp/claude-team/status/*.status; do cat "$f"; echo "---"; done
-```
-
-## Workflow
-1. User gives you a high-level task
-2. You break it down into subtasks
-3. You delegate subtasks to available panes using `tmux send-keys`
-4. You monitor progress by capturing pane output
-5. You report back to the user with consolidated results
-
-## Important
-- Panes 0.1 through 0.N are your teammates — they are regular Claude Code instances
-- Wait for Claude to be ready (showing the `>` prompt) before sending tasks
-- You can check if a pane is idle by capturing its output and looking for the input prompt
-- Keep track of assignments so you don't double-assign work
-SKILL_MANAGER_PROMPT_EOF
-echo "    ✓ tmux-manager-prompt"
+### Notes
+- The target Claude will receive this as user input in its conversation
+- You can check on their progress later with `/tmux-status`
+- The target instance must be idle (waiting for input) for this to work
+SKILL_DELEGATE_EOF
 
 cat > ~/.claude/skills/tmux-monitor.md << 'SKILL_MONITOR_EOF'
 # Skill: tmux-monitor
@@ -733,7 +576,6 @@ When a worker shows ERROR state:
 3. Include timing info when available (workers show "Worked for Xs")
 4. If a QUEUED worker hasn't started after 10s, send Enter again
 SKILL_MONITOR_EOF
-echo "    ✓ tmux-monitor"
 
 cat > ~/.claude/skills/tmux-restart-workers.md << 'SKILL_RESTART_EOF'
 # Skill: tmux-restart-workers
@@ -836,9 +678,77 @@ You are restarting all Claude Code instances in the tmux team EXCEPT the Manager
 - If a worker shows "Not logged in", run `/login` on it via `tmux send-keys -t claude-team:0.X "/login" Enter`
 - The number of panes may vary — always discover dynamically from step 1
 SKILL_RESTART_EOF
-echo "    ✓ tmux-restart-workers"
 
-cat > ~/.claude/skills/tmux-runner-prompt.md << 'SKILL_RUNNER_PROMPT_EOF'
+cat > ~/.claude/skills/tmux-manager-prompt.md << 'SKILL_MGRPROMPT_EOF'
+# TMUX Claude Manager System Prompt
+
+You are the **TMUX Claude Manager** (pane 0.0). You orchestrate a team of Claude Code instances running in parallel TMUX panes.
+
+## Your Role
+- You are the coordinator. You assign tasks, check progress, and collect results.
+- You do NOT do implementation work yourself — you delegate to teammates.
+- You maintain awareness of what each pane is working on.
+
+## Communication System
+
+### Message Bus: `/tmp/claude-team/`
+- `messages/` — per-pane message files (named `{pane_safe}_{timestamp}.msg`)
+- `broadcasts/` — broadcast history
+- `status/` — per-pane status files
+
+### Available Skills
+- `/tmux-team` — View all instances, their status, and unread messages
+- `/tmux-send` — Send a direct message to a specific pane
+- `/tmux-broadcast` — Broadcast to all panes
+- `/tmux-delegate` — Send a task/prompt directly to another Claude's input
+- `/tmux-status` — Set/view status across instances
+- `/tmux-inbox` — Check your own inbox
+
+### Sending tasks to teammates
+To assign work to a pane, use `tmux send-keys`:
+```bash
+# For short prompts (< 200 chars, no special chars)
+tmux send-keys -t "claude-team:0.3" "Fix the bug in auth.ts" Enter
+
+# For long prompts, use load-buffer
+mkdir -p /tmp/claude-team
+TASKFILE=$(mktemp /tmp/claude-team/task_XXXXXX.txt)
+cat > "$TASKFILE" << 'TASK'
+Your detailed task here...
+TASK
+tmux load-buffer "$TASKFILE"
+tmux paste-buffer -t "claude-team:0.3"
+sleep 0.5
+tmux send-keys -t "claude-team:0.3" Enter
+rm "$TASKFILE"
+```
+
+**CRITICAL**: Never use `send-keys "" Enter` — the empty string swallows the Enter. Always use bare `Enter` after `sleep 0.5`.
+
+### Checking on teammates
+```bash
+# See what's on their screen (last 50 lines)
+tmux capture-pane -t "claude-team:0.3" -p -S -50
+
+# Check all pane statuses
+for f in /tmp/claude-team/status/*.status; do cat "$f"; echo "---"; done
+```
+
+## Workflow
+1. User gives you a high-level task
+2. You break it down into subtasks
+3. You delegate subtasks to available panes using `tmux send-keys`
+4. You monitor progress by capturing pane output
+5. You report back to the user with consolidated results
+
+## Important
+- Panes 0.1 through 0.N are your teammates — they are regular Claude Code instances
+- Wait for Claude to be ready (showing the `>` prompt) before sending tasks
+- You can check if a pane is idle by capturing its output and looking for the input prompt
+- Keep track of assignments so you don't double-assign work
+SKILL_MGRPROMPT_EOF
+
+cat > ~/.claude/skills/tmux-runner-prompt.md << 'SKILL_RUNPROMPT_EOF'
 # TMUX Claude Runner System Prompt
 
 You are the **TMUX Claude Runner** (pane 0.1). You continuously monitor all other Claude instances and keep them unblocked.
@@ -905,100 +815,7 @@ When you start, run a continuous monitoring cycle:
 - Log every action to `/tmp/claude-team/runner.log` so the Manager can review
 - If unsure whether something is a prompt, err on the side of NOT pressing anything
 - Only answer simple y/n and confirmation prompts — do not type task content
-SKILL_RUNNER_PROMPT_EOF
-echo "    ✓ tmux-runner-prompt"
-
-cat > ~/.claude/skills/tmux-send.md << 'SKILL_SEND_EOF'
-# Skill: tmux-send
-
-Send a message to another Claude instance in TMUX.
-
-## Usage
-`/tmux-send`
-
-## Prompt
-You are sending a message to another Claude Code instance running in a TMUX pane.
-
-### Steps
-
-1. First, list available panes to find targets:
-   ```bash
-   tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid}'
-   ```
-
-2. Identify your own pane:
-   ```bash
-   tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}'
-   ```
-
-3. Ask the user which pane to message and what to say (if not already specified).
-
-4. Write the message to the shared message bus:
-   ```bash
-   TIMESTAMP=$(date +%s%N)
-   FROM=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
-   cat > "/tmp/claude-team/messages/${TARGET_PANE//[:.]/_}_${TIMESTAMP}.msg" <<EOF
-   FROM: $FROM
-   TO: $TARGET_PANE
-   TIME: $(date -Iseconds)
-   ---
-   $MESSAGE
-   EOF
-   ```
-
-5. Then send a keyboard notification to the target pane so the other Claude sees it:
-   ```bash
-   tmux send-keys -t "$TARGET_PANE" "/tmux-inbox" Enter
-   ```
-
-This triggers the target Claude to check its inbox.
-SKILL_SEND_EOF
-echo "    ✓ tmux-send"
-
-cat > ~/.claude/skills/tmux-status.md << 'SKILL_STATUS_EOF'
-# Skill: tmux-status
-
-Share your status or check the status of other Claude instances.
-
-## Usage
-`/tmux-status`
-
-## Prompt
-You are managing status updates across Claude Code instances in TMUX.
-
-### Steps
-
-1. Identify yourself:
-   ```bash
-   MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
-   MY_PANE_SAFE=${MY_PANE//[:.]/_}
-   ```
-
-2. Ask the user: **set** your status or **view** all statuses?
-
-### Setting status
-Write your current status:
-```bash
-cat > "/tmp/claude-team/status/${MY_PANE_SAFE}.status" <<EOF
-PANE: $MY_PANE
-UPDATED: $(date -Iseconds)
-STATUS: $STATUS_TEXT
-TASK: $CURRENT_TASK
-EOF
-```
-
-### Viewing statuses
-Read all status files:
-```bash
-for f in /tmp/claude-team/status/*.status; do
-  echo "---"
-  cat "$f"
-done
-```
-
-Display a summary table showing each pane, its status, and what task it's working on.
-SKILL_STATUS_EOF
-echo "    ✓ tmux-status"
+SKILL_RUNPROMPT_EOF
 
 cat > ~/.claude/skills/tmux-team.md << 'SKILL_TEAM_EOF'
 # Skill: tmux-team
@@ -1046,151 +863,598 @@ You are showing the team overview of all Claude Code instances running in TMUX.
    - Unread message count
    - Mark YOUR pane with `<-- you` indicator
 SKILL_TEAM_EOF
-echo "    ✓ tmux-team"
 
-# ── Install claude-team command ──────────────────────────────────────
+cat > ~/.claude/skills/tmux-send.md << 'SKILL_SEND_EOF'
+# Skill: tmux-send
 
-echo "  Installing claude-team command..."
-mkdir -p ~/.local/bin
-cat > ~/.local/bin/claude-team << 'BOOTSTRAP_EOF'
+Send a message to another Claude instance in TMUX.
+
+## Usage
+`/tmux-send`
+
+## Prompt
+You are sending a message to another Claude Code instance running in a TMUX pane.
+
+### Steps
+
+1. First, list available panes to find targets:
+   ```bash
+   tmux list-panes -a -F '#{session_name}:#{window_index}.#{pane_index} #{pane_title} #{pane_pid}'
+   ```
+
+2. Identify your own pane:
+   ```bash
+   tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}'
+   ```
+
+3. Ask the user which pane to message and what to say (if not already specified).
+
+4. Write the message to the shared message bus:
+   ```bash
+   TIMESTAMP=$(date +%s%N)
+   FROM=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
+   cat > "/tmp/claude-team/messages/${TARGET_PANE//[:.]/_}_${TIMESTAMP}.msg" <<EOF
+   FROM: $FROM
+   TO: $TARGET_PANE
+   TIME: $(date -Iseconds)
+   ---
+   $MESSAGE
+   EOF
+   ```
+
+5. Then send a keyboard notification to the target pane so the other Claude sees it:
+   ```bash
+   tmux send-keys -t "$TARGET_PANE" "/tmux-inbox" Enter
+   ```
+
+This triggers the target Claude to check its inbox.
+SKILL_SEND_EOF
+
+cat > ~/.claude/skills/tmux-broadcast.md << 'SKILL_BROADCAST_EOF'
+# Skill: tmux-broadcast
+
+Broadcast a message to ALL other Claude instances in TMUX.
+
+## Usage
+`/tmux-broadcast`
+
+## Prompt
+You are broadcasting a message to all other Claude Code instances in your TMUX session.
+
+### Steps
+
+1. Identify yourself:
+   ```bash
+   MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
+   MY_SESSION=$(tmux display-message -p '#{session_name}')
+   ```
+
+2. Ask the user for the broadcast message (if not already provided).
+
+3. Write a broadcast file:
+   ```bash
+   TIMESTAMP=$(date +%s%N)
+   cat > "/tmp/claude-team/broadcasts/${TIMESTAMP}.broadcast" <<EOF
+   FROM: $MY_PANE
+   TIME: $(date -Iseconds)
+   ---
+   $MESSAGE
+   EOF
+   ```
+
+4. Send the `/tmux-inbox-broadcast` trigger to every OTHER pane in the session:
+   ```bash
+   for pane in $(tmux list-panes -s -t "$MY_SESSION" -F '#{session_name}:#{window_index}.#{pane_index}'); do
+     if [ "$pane" != "$MY_PANE" ]; then
+       # Also write a per-pane message so they see it in inbox
+       PANE_SAFE=${pane//[:.]/_}
+       cp "/tmp/claude-team/broadcasts/${TIMESTAMP}.broadcast" "/tmp/claude-team/messages/${PANE_SAFE}_${TIMESTAMP}.msg"
+       tmux send-keys -t "$pane" "/tmux-inbox" Enter
+     fi
+   done
+   ```
+
+This notifies all other panes to check their inbox.
+SKILL_BROADCAST_EOF
+
+cat > ~/.claude/skills/tmux-inbox.md << 'SKILL_INBOX_EOF'
+# Skill: tmux-inbox
+
+Check and read messages from other Claude instances.
+
+## Usage
+`/tmux-inbox`
+
+## Prompt
+You are checking your inbox for messages from other Claude Code instances in TMUX.
+
+### Steps
+
+1. Identify your pane:
+   ```bash
+   MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
+   MY_PANE_SAFE=${MY_PANE//[:.]/_}
+   ```
+
+2. List and read all messages addressed to you:
+   ```bash
+   ls -t /tmp/claude-team/messages/${MY_PANE_SAFE}_*.msg 2>/dev/null
+   ```
+
+3. For each message file found, read it and display it to the user.
+
+4. After reading, archive the messages:
+   ```bash
+   mkdir -p /tmp/claude-team/messages/archive
+   mv /tmp/claude-team/messages/${MY_PANE_SAFE}_*.msg /tmp/claude-team/messages/archive/ 2>/dev/null
+   ```
+
+5. If no messages found, tell the user the inbox is empty.
+
+6. If a message requires a response, ask the user if they want to reply using `/tmux-send`.
+SKILL_INBOX_EOF
+
+cat > ~/.claude/skills/tmux-status.md << 'SKILL_STATUS_EOF'
+# Skill: tmux-status
+
+Share your status or check the status of other Claude instances.
+
+## Usage
+`/tmux-status`
+
+## Prompt
+You are managing status updates across Claude Code instances in TMUX.
+
+### Steps
+
+1. Identify yourself:
+   ```bash
+   MY_PANE=$(tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}')
+   MY_PANE_SAFE=${MY_PANE//[:.]/_}
+   ```
+
+2. Ask the user: **set** your status or **view** all statuses?
+
+### Setting status
+Write your current status:
+```bash
+cat > "/tmp/claude-team/status/${MY_PANE_SAFE}.status" <<EOF
+PANE: $MY_PANE
+UPDATED: $(date -Iseconds)
+STATUS: $STATUS_TEXT
+TASK: $CURRENT_TASK
+EOF
+```
+
+### Viewing statuses
+Read all status files:
+```bash
+for f in /tmp/claude-team/status/*.status; do
+  echo "---"
+  cat "$f"
+done
+```
+
+Display a summary table showing each pane, its status, and what task it's working on.
+SKILL_STATUS_EOF
+
+echo "  ✓ 11 skills installed"
+
+# ── Launcher Script ────────────────────────────────────────────────────
+
+echo "  Installing claude-team launcher..."
+
+cat > ~/.local/bin/claude-team << 'LAUNCHER_SCRIPT_EOF'
 #!/usr/bin/env bash
+set -euo pipefail
 # ──────────────────────────────────────────────────────────────────────
-# claude-team — Launch a TMUX Claude Team session
+# claude-team — Project-aware TMUX Claude Team launcher
 #
 # Usage:
-#   claude-team              # 6x2 grid (12 panes) in current directory
-#   claude-team 4x3          # 4x3 grid (12 panes)
-#   claude-team 8x1          # 8x1 grid (8 panes)
-#
-# Environment:
-#   CLAUDE_TEAM_DIR   — Working directory (default: $PWD)
-#   CLAUDE_TEAM_NAME  — tmux session name (default: "claude-team")
+#   claude-team              # Smart launch (auto-attach or project picker)
+#   claude-team init         # Register current directory as a project
+#   claude-team list         # Show all registered projects + status
+#   claude-team stop         # Stop session for current project
+#   claude-team 4x3          # Launch/reattach with specific grid
+#   claude-team --help       # Show usage
 #
 # Alias suggestion:
 #   alias ct="claude-team"
 # ──────────────────────────────────────────────────────────────────────
 
-dir="${CLAUDE_TEAM_DIR:-$PWD}"
-grid="${1:-6x2}"
-cols="${grid%x*}"
-rows="${grid#*x}"
-total=$(( cols * rows ))
-watchdog_pane=$cols
-session="${CLAUDE_TEAM_NAME:-claude-team}"
+PROJECTS_FILE="$HOME/.claude/claude-team/projects"
+mkdir -p "$(dirname "$PROJECTS_FILE")"
+touch "$PROJECTS_FILE"
 
-# ── Clean up ─────────────────────────────────────────────────
-tmux kill-session -t "$session" 2>/dev/null
-rm -rf /tmp/claude-team
-mkdir -p /tmp/claude-team/{messages,broadcasts,status}
+# ── Helpers ─────────────────────────────────────────────────────────
 
-tmux new-session -d -s "$session" -c "$dir"
+# Derive a sanitized project name from a directory path
+project_name_from_dir() {
+  basename "$1" | tr '[:upper:] .' '[:lower:]--' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//'
+}
 
-# ── Theme: pane borders with titles ──────────────────────────
-tmux set-option -t "$session" pane-border-status top
-tmux set-option -t "$session" pane-border-format \
-  ' #{?pane_active,#[fg=green#,bold],#[fg=colour245]}#{pane_index} #{pane_title} #[default]'
-tmux set-option -t "$session" pane-border-style 'fg=colour238'
-tmux set-option -t "$session" pane-active-border-style 'fg=green'
-tmux set-option -t "$session" pane-border-lines heavy
+# Find the project name registered for a given directory (empty if none)
+find_project() {
+  local dir="$1"
+  grep -m1 ":${dir}$" "$PROJECTS_FILE" 2>/dev/null | cut -d: -f1 || true
+}
 
-# ── Status bar ───────────────────────────────────────────────
-tmux set-option -t "$session" status-position top
-tmux set-option -t "$session" status-style 'bg=colour235,fg=colour248'
-tmux set-option -t "$session" status-left-length 40
-tmux set-option -t "$session" status-right-length 60
-tmux set-option -t "$session" status-left \
-  '#[fg=colour235,bg=green,bold]  CLAUDE TEAM #[fg=green,bg=colour235] '
-tmux set-option -t "$session" status-right \
-  '#[fg=colour245] #{pane_title} #[fg=colour235,bg=colour245] %H:%M #[fg=colour248,bg=colour240] #(echo $(($(ls /tmp/claude-team/messages/*.msg 2>/dev/null | wc -l))) msgs) '
-tmux set-option -t "$session" status-interval 5
+# Check if a tmux session exists
+session_exists() {
+  tmux has-session -t "$1" 2>/dev/null
+}
 
-# ── Split into grid ──────────────────────────────────────────
-for (( r=1; r<rows; r++ )); do
-  tmux split-window -v -t "$session:0.0" -c "$dir"
-done
-tmux select-layout -t "$session" even-vertical
+# Register a directory as a project
+register_project() {
+  local dir="$1"
+  local name
+  name="$(project_name_from_dir "$dir")"
 
-for (( r=0; r<rows; r++ )); do
-  for (( c=1; c<cols; c++ )); do
-    tmux split-window -h -t "$session:0.$((r * cols))" -c "$dir"
-  done
-done
+  # Already registered?
+  if grep -q ":${dir}$" "$PROJECTS_FILE" 2>/dev/null; then
+    echo "  Already registered as '$(find_project "$dir")'"
+    return 0
+  fi
 
-sleep 2
+  # Handle name collision
+  if grep -q "^${name}:" "$PROJECTS_FILE" 2>/dev/null; then
+    local i=2
+    while grep -q "^${name}-${i}:" "$PROJECTS_FILE" 2>/dev/null; do ((i++)); done
+    name="${name}-${i}"
+  fi
 
-# ── Name all panes ──────────────────────────────────────────
-tmux select-pane -t "$session:0.0" -T "MGR  Manager"
-tmux select-pane -t "$session:0.$watchdog_pane" -T "RUN  Watchdog"
-wnum=0
-for (( i=1; i<total; i++ )); do
-  [[ $i -eq $watchdog_pane ]] && continue
-  (( wnum++ ))
-  tmux select-pane -t "$session:0.$i" -T "W${wnum}  Worker ${wnum}"
-done
+  echo "${name}:${dir}" >> "$PROJECTS_FILE"
+  echo "  ✓ Registered '${name}' → ${dir}"
+}
 
-# ── Launch Manager (pane 0.0) ────────────────────────────────
-tmux send-keys -t "$session:0.0" \
-  "claude --dangerously-skip-permissions --agent tmux-manager" Enter
-sleep 0.5
-
-# Auto-send initial briefing once Manager is ready
-(
-  sleep 10
-  # Build worker pane list (all panes except 0.0 and 0.$watchdog_pane)
-  worker_panes=""
-  for (( i=1; i<total; i++ )); do
-    [[ $i -eq $watchdog_pane ]] && continue
-    [[ -n "$worker_panes" ]] && worker_panes+=", "
-    worker_panes+="0.$i"
-  done
-  tmux send-keys -t "$session:0.0" \
-    "Team is online. You have $((total - 2)) workers in panes ${worker_panes}. Pane 0.$watchdog_pane is the Watchdog (auto-accepts prompts). All workers are idle and awaiting tasks. What should we work on?" Enter
-) &
-
-# ── Launch Watchdog (pane 0.$watchdog_pane) ──────────────────
-tmux send-keys -t "$session:0.$watchdog_pane" \
-  "claude --dangerously-skip-permissions --agent tmux-watchdog" Enter
-sleep 0.5
-
-# Auto-start the watchdog loop
-(
-  sleep 12
-  # Build worker pane list for watchdog
-  watch_panes=""
-  for (( i=1; i<total; i++ )); do
-    [[ $i -eq $watchdog_pane ]] && continue
-    [[ -n "$watch_panes" ]] && watch_panes+=", "
-    watch_panes+="0.$i"
-  done
-  tmux send-keys -t "$session:0.$watchdog_pane" \
-    "Start monitoring. Total panes: $total. Skip pane 0.0 (Manager) and 0.$watchdog_pane (yourself). Monitor panes ${watch_panes}." Enter
-) &
-
-# ── Launch Workers (all panes except Manager and Watchdog) ──
-for (( i=1; i<total; i++ )); do
-  [[ $i -eq $watchdog_pane ]] && continue
-  tmux send-keys -t "$session:0.$i" \
-    "claude --dangerously-skip-permissions" Enter
-  sleep 0.3
-done
-
-# ── Focus on Manager pane, attach ────────────────────────────
-tmux select-pane -t "$session:0.0"
-tmux attach -t "$session"
-BOOTSTRAP_EOF
-chmod +x ~/.local/bin/claude-team
-echo "    ✓ claude-team"
-
-# Check PATH
-if ! echo "$PATH" | tr ':' '\n' | grep -qx "$HOME/.local/bin"; then
+# List all projects with running status
+list_projects() {
   echo ""
-  echo "  ⚠  ~/.local/bin is not in your PATH. Add to your shell config:"
-  echo '     export PATH="$HOME/.local/bin:$PATH"'
+  echo "  Claude Code TMUX Team — Projects"
+  echo ""
+  local has_projects=false
+  while IFS=: read -r name path; do
+    [[ -z "$name" ]] && continue
+    has_projects=true
+    local short_path="${path/#$HOME/\~}"
+    if session_exists "ct-${name}"; then
+      printf "  ● %-20s %s\n" "$name" "$short_path"
+    else
+      printf "  ○ %-20s %s\n" "$name" "$short_path"
+    fi
+  done < "$PROJECTS_FILE"
+  if [[ "$has_projects" == false ]]; then
+    echo "  (no projects registered)"
+  fi
+  echo ""
+  echo "  ● = running, ○ = stopped"
+  echo ""
+}
+
+# Stop session for current directory's project
+stop_project() {
+  local name
+  name="$(find_project "$(pwd)")"
+  if [[ -z "$name" ]]; then
+    echo "  No project registered for $(pwd)"
+    return 1
+  fi
+  if tmux kill-session -t "ct-${name}" 2>/dev/null; then
+    echo "  Stopped ct-${name}"
+  else
+    echo "  No active session for ${name}"
+  fi
+}
+
+# Show interactive project picker menu
+show_menu() {
+  local grid="${1:-6x2}"
+
+  echo ""
+  echo "  Claude Code TMUX Team"
+  echo "  ====================="
+  echo ""
+  echo "  No project registered for $(pwd)"
+  echo ""
+
+  # Read projects into arrays
+  local -a names=() paths=() statuses=()
+  while IFS=: read -r name path; do
+    [[ -z "$name" ]] && continue
+    names+=("$name")
+    paths+=("$path")
+    if session_exists "ct-${name}"; then
+      statuses+=("● running")
+    else
+      statuses+=("○ stopped")
+    fi
+  done < "$PROJECTS_FILE"
+
+  if [[ ${#names[@]} -gt 0 ]]; then
+    echo "  Known projects:"
+    for i in "${!names[@]}"; do
+      local short_path="${paths[$i]/#$HOME/\~}"
+      printf "    %d) %-20s %s  %s\n" $((i+1)) "${names[$i]}" "${short_path}" "${statuses[$i]}"
+    done
+    echo ""
+  fi
+
+  echo "  Options:"
+  echo "    #) Enter number to open a project"
+  echo "    i) Init current directory as new project"
+  echo "    q) Quit"
+  echo ""
+
+  read -rp "  > " choice
+
+  case "$choice" in
+    [0-9]*)
+      local idx=$((choice - 1))
+      if [[ $idx -ge 0 && $idx -lt ${#names[@]} ]]; then
+        local selected_name="${names[$idx]}"
+        local selected_path="${paths[$idx]}"
+        local selected_session="ct-${selected_name}"
+        if session_exists "$selected_session"; then
+          tmux attach -t "$selected_session"
+        else
+          launch_session "$selected_name" "$selected_path" "$grid"
+        fi
+      else
+        echo "  Invalid selection"
+        return 1
+      fi
+      ;;
+    i|I|init)
+      register_project "$(pwd)"
+      echo "  Run 'claude-team' again to launch."
+      ;;
+    q|Q) return 0 ;;
+    *)
+      echo "  Invalid option"
+      return 1
+      ;;
+  esac
+}
+
+# ── Launch Session ──────────────────────────────────────────────────
+# The main tmux setup: grid splits, theming, pane naming,
+# manager/watchdog/worker launches, auto-briefing.
+
+launch_session() {
+  local name="$1"
+  local dir="$2"
+  local grid="${3:-6x2}"
+  local cols="${grid%x*}"
+  local rows="${grid#*x}"
+  local total=$(( cols * rows ))
+  local watchdog_pane=$cols
+  local session="ct-${name}"
+  local runtime_dir="/tmp/claude-team/${name}"
+
+  cd "$dir"
+
+  # ── Clean up ─────────────────────────────────────────────────
+  tmux kill-session -t "$session" 2>/dev/null || true
+  rm -rf "$runtime_dir"
+  mkdir -p "${runtime_dir}"/{messages,broadcasts,status}
+
+  tmux new-session -d -s "$session" -c "$dir"
+
+  # ── Theme: pane borders with titles ──────────────────────────
+  tmux set-option -t "$session" pane-border-status top
+  tmux set-option -t "$session" pane-border-format \
+    ' #{?pane_active,#[fg=green#,bold],#[fg=colour245]}#{pane_index} #{pane_title} #[default]'
+  tmux set-option -t "$session" pane-border-style 'fg=colour238'
+  tmux set-option -t "$session" pane-active-border-style 'fg=green'
+  tmux set-option -t "$session" pane-border-lines heavy
+
+  # ── Status bar ───────────────────────────────────────────────
+  tmux set-option -t "$session" status-position top
+  tmux set-option -t "$session" status-style 'bg=colour235,fg=colour248'
+  tmux set-option -t "$session" status-left-length 50
+  tmux set-option -t "$session" status-right-length 60
+  tmux set-option -t "$session" status-left \
+    "#[fg=colour235,bg=green,bold]  CLAUDE TEAM: ${name} #[fg=green,bg=colour235] "
+  tmux set-option -t "$session" status-right \
+    "#[fg=colour245] #{pane_title} #[fg=colour235,bg=colour245] %H:%M #[fg=colour248,bg=colour240] #(echo \$((  \$(ls ${runtime_dir}/messages/*.msg 2>/dev/null | wc -l)  )) msgs) "
+  tmux set-option -t "$session" status-interval 5
+
+  # ── Split into grid ──────────────────────────────────────────
+  for (( r=1; r<rows; r++ )); do
+    tmux split-window -v -t "$session:0.0" -c "$dir"
+  done
+  tmux select-layout -t "$session" even-vertical
+
+  for (( r=0; r<rows; r++ )); do
+    for (( c=1; c<cols; c++ )); do
+      tmux split-window -h -t "$session:0.$((r * cols))" -c "$dir"
+    done
+  done
+
+  sleep 2
+
+  # ── Name all panes ──────────────────────────────────────────
+  tmux select-pane -t "$session:0.0" -T "MGR  Manager"
+  tmux select-pane -t "$session:0.$watchdog_pane" -T "RUN  Watchdog"
+  local wnum=0
+  for (( i=1; i<total; i++ )); do
+    [[ $i -eq $watchdog_pane ]] && continue
+    (( wnum++ ))
+    tmux select-pane -t "$session:0.$i" -T "W${wnum}  Worker ${wnum}"
+  done
+
+  # ── Launch Manager (pane 0.0) ────────────────────────────────
+  tmux send-keys -t "$session:0.0" \
+    "claude --dangerously-skip-permissions --agent tmux-manager" Enter
+  sleep 0.5
+
+  # Auto-send initial briefing once Manager is ready
+  (
+    sleep 10
+    # Build worker pane list (all panes except 0.0 and watchdog)
+    worker_panes=""
+    for (( i=1; i<total; i++ )); do
+      [[ $i -eq $watchdog_pane ]] && continue
+      [[ -n "$worker_panes" ]] && worker_panes+=", "
+      worker_panes+="0.$i"
+    done
+    tmux send-keys -t "$session:0.0" \
+      "Team is online (project: ${name}). You have $((total - 2)) workers in panes ${worker_panes}. Pane 0.$watchdog_pane is the Watchdog (auto-accepts prompts). All workers are idle and awaiting tasks. What should we work on?" Enter
+  ) &
+
+  # ── Launch Watchdog (pane 0.$watchdog_pane) ──────────────────
+  tmux send-keys -t "$session:0.$watchdog_pane" \
+    "claude --dangerously-skip-permissions --agent tmux-watchdog" Enter
+  sleep 0.5
+
+  # Auto-start the watchdog loop
+  (
+    sleep 12
+    # Build worker pane list for watchdog
+    watch_panes=""
+    for (( i=1; i<total; i++ )); do
+      [[ $i -eq $watchdog_pane ]] && continue
+      [[ -n "$watch_panes" ]] && watch_panes+=", "
+      watch_panes+="0.$i"
+    done
+    tmux send-keys -t "$session:0.$watchdog_pane" \
+      "Start monitoring. Total panes: $total. Skip pane 0.0 (Manager) and 0.$watchdog_pane (yourself). Monitor panes ${watch_panes}." Enter
+  ) &
+
+  # ── Launch Workers (all panes except Manager and Watchdog) ──
+  for (( i=1; i<total; i++ )); do
+    [[ $i -eq $watchdog_pane ]] && continue
+    tmux send-keys -t "$session:0.$i" \
+      "claude --dangerously-skip-permissions" Enter
+    sleep 0.3
+  done
+
+  # ── Focus on Manager pane, attach ────────────────────────────
+  tmux select-pane -t "$session:0.0"
+  tmux attach -t "$session"
+}
+
+# ── Main Dispatch ───────────────────────────────────────────────────
+
+grid=""
+
+case "${1:-}" in
+  --help|-h)
+    cat << 'HELP'
+Usage: claude-team [command] [grid]
+
+Commands:
+  (none)     Smart launch — auto-attach or show project picker
+  init       Register current directory as a project
+  list       Show all registered projects and their status
+  stop       Stop the session for the current project
+  --help     Show this help
+
+Grid:
+  NxM        Grid layout (e.g., 6x2, 4x3, 3x2)
+             Only used when launching a new session
+
+Examples:
+  claude-team              # smart launch
+  claude-team init         # register current dir
+  claude-team 4x3          # launch with 4x3 grid
+  claude-team list         # show all projects
+  claude-team stop         # stop current project session
+HELP
+    exit 0
+    ;;
+  init)
+    register_project "$(pwd)"
+    exit 0
+    ;;
+  list)
+    list_projects
+    exit 0
+    ;;
+  stop)
+    stop_project
+    exit $?
+    ;;
+  [0-9]*x[0-9]*)
+    grid="$1"
+    ;;
+  "")
+    # No args — fall through to smart launch
+    ;;
+  *)
+    echo "  Unknown command: $1"
+    echo "  Run 'claude-team --help' for usage"
+    exit 1
+    ;;
+esac
+
+# ── Smart Launch ────────────────────────────────────────────────────
+
+dir="$(pwd)"
+name="$(find_project "$dir")"
+
+if [[ -n "$name" ]]; then
+  # Known project
+  session="ct-${name}"
+  if session_exists "$session"; then
+    # Already running — just attach
+    tmux attach -t "$session"
+  else
+    # Known but not running — launch
+    launch_session "$name" "$dir" "${grid:-6x2}"
+  fi
+else
+  # Unknown directory — show interactive menu
+  show_menu "${grid:-6x2}"
+fi
+LAUNCHER_SCRIPT_EOF
+
+chmod +x ~/.local/bin/claude-team
+
+echo "  ✓ claude-team installed to ~/.local/bin/claude-team"
+
+# ── PATH check ─────────────────────────────────────────────────────
+
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+  echo ""
+  echo "  ⚠  ~/.local/bin is not in your PATH."
+  echo ""
+
+  # Detect shell config file
+  SHELL_RC=""
+  if [[ -f "$HOME/.zshrc" ]]; then
+    SHELL_RC="$HOME/.zshrc"
+  elif [[ -f "$HOME/.bashrc" ]]; then
+    SHELL_RC="$HOME/.bashrc"
+  elif [[ -f "$HOME/.bash_profile" ]]; then
+    SHELL_RC="$HOME/.bash_profile"
+  fi
+
+  if [[ -n "$SHELL_RC" ]]; then
+    echo '  Adding to '"$SHELL_RC"'...'
+    echo '' >> "$SHELL_RC"
+    echo '# Claude Code TMUX Team' >> "$SHELL_RC"
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+    echo "  ✓ Added PATH entry to $SHELL_RC"
+    echo "  Run: source $SHELL_RC"
+  else
+    echo "  Add this to your shell config:"
+    echo '    export PATH="$HOME/.local/bin:$PATH"'
+  fi
 fi
 
+# ── Done ───────────────────────────────────────────────────────────
+
 echo ""
-echo "  ✅ Installed! Run:"
+echo "  ✅ Installation complete!"
 echo ""
-echo "    claude-team          # launch with default 6x2 grid"
-echo "    claude-team --help   # show options"
+echo "  Usage:"
+echo "    claude-team              # smart launch (auto-attach or project picker)"
+echo "    claude-team init         # register current directory as a project"
+echo "    claude-team list         # show all registered projects"
+echo "    claude-team 4x3          # launch with 4x3 grid"
+echo "    claude-team --help       # show all options"
+echo ""
+echo "  Alias suggestion:"
+echo "    alias ct=\"claude-team\""
 echo ""

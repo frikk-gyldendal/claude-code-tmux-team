@@ -42,32 +42,28 @@ You talk to the Manager. The Manager runs the team. You ship 10x faster.
 
 ## Quick Start
 
-**One command — no clone needed:**
+**Install:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/frikk-gyldendal/claude-code-tmux-team/main/web-install.sh | bash
 ```
 
-**Or clone and install locally:**
+Or clone and install locally:
 
 ```bash
 git clone https://github.com/frikk-gyldendal/claude-code-tmux-team.git
 cd claude-code-tmux-team && ./install.sh
 ```
 
-**Then launch from any project directory:**
+**Launch:**
 
 ```bash
-claude-team       # default 6x2 grid (10 workers)
+cd ~/your-project
+claude-team            # first time: shows project picker, choose "init"
+claude-team            # next time: auto-launches your team
 ```
 
-That's it. The Manager boots up, workers come online, and you're asked what to work on.
-
-```bash
-claude-team 4x3      # custom grid layout
-claude-team 3x2      # smaller team (4 workers)
-claude-team --help   # all options
-```
+That's it. No config files. No shell reload. Just `claude-team`.
 
 ---
 
@@ -77,27 +73,48 @@ claude-team --help   # all options
 
 ---
 
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `claude-team` | Smart launch — auto-attach, launch, or show project picker |
+| `claude-team init` | Register current directory as a project |
+| `claude-team list` | Show all projects with running/stopped status |
+| `claude-team stop` | Stop the team for the current project |
+| `claude-team 4x3` | Launch with a custom grid layout |
+| `claude-team --help` | Show all options |
+
+---
+
 ## How It Works
 
 <table>
 <tr>
-<td width="40" align="center"><strong>1</strong></td>
-<td>You tell the Manager what to do — <em>"Refactor all components to use the new design tokens"</em></td>
+<td width="40" align="center"><strong>0</strong></td>
+<td>You register your project: <code>claude-team init</code> (one time per project)</td>
+</tr>
+<tr>
+<td align="center"><strong>1</strong></td>
+<td>You run <code>claude-team</code> — it auto-launches or reattaches to an existing session</td>
 </tr>
 <tr>
 <td align="center"><strong>2</strong></td>
-<td>The Manager analyzes the task and breaks it into independent, parallelizable subtasks</td>
+<td>You tell the Manager what to do — <em>"Refactor all components to use the new design tokens"</em></td>
 </tr>
 <tr>
 <td align="center"><strong>3</strong></td>
-<td>Each subtask is dispatched to an idle worker with a self-contained prompt</td>
+<td>The Manager analyzes the task and breaks it into independent, parallelizable subtasks</td>
 </tr>
 <tr>
 <td align="center"><strong>4</strong></td>
-<td>The Watchdog monitors workers and auto-accepts permission prompts to keep them unblocked</td>
+<td>Each subtask is dispatched to an idle worker with a self-contained prompt</td>
 </tr>
 <tr>
 <td align="center"><strong>5</strong></td>
+<td>The Watchdog monitors workers and auto-accepts permission prompts to keep them unblocked</td>
+</tr>
+<tr>
+<td align="center"><strong>6</strong></td>
 <td>The Manager tracks progress and reports back when everything is done</td>
 </tr>
 </table>
@@ -109,10 +126,11 @@ claude-team --help   # all options
 - **Parallel execution** — 10 workers running simultaneously, not sequentially
 - **Smart orchestration** — Manager plans, delegates, and monitors without writing code itself
 - **Auto-unblocking** — Watchdog handles `y/n` prompts, permission dialogs, and confirmations
+- **Project-aware** — Register projects, auto-attach to running sessions, interactive picker
 - **Flexible grid** — Configure `COLSxROWS` to match your screen and workload
 - **Message bus** — Workers, Manager, and Watchdog communicate through a lightweight file-based system
 - **Slash commands** — Built-in `/tmux-dispatch`, `/tmux-monitor`, `/tmux-team` and more
-- **Zero config** — Clone, install, launch. Works with any project.
+- **Zero config** — Install, init, launch. Works with any project.
 - **Restartable** — Restart workers without killing the Manager with `/tmux-restart-workers`
 
 ---
@@ -131,15 +149,15 @@ claude-team --help   # all options
 |---------|-----------|
 | Task dispatch | `tmux send-keys` / `tmux paste-buffer` |
 | Progress monitoring | `tmux capture-pane` |
-| Inter-pane messages | `/tmp/claude-team/messages/` |
-| Broadcasts | `/tmp/claude-team/broadcasts/` |
-| Status tracking | `/tmp/claude-team/status/` |
+| Inter-pane messages | `/tmp/claude-team/{project}/messages/` |
+| Broadcasts | `/tmp/claude-team/{project}/broadcasts/` |
+| Status tracking | `/tmp/claude-team/{project}/status/` |
 
 ---
 
 ## Grid Configurations
 
-The argument to `claude-team` is a `COLSxROWS` specification. Two panes are always reserved (Manager + Watchdog):
+The grid argument to `claude-team` is a `COLSxROWS` specification. Two panes are always reserved (Manager + Watchdog):
 
 | Grid | Panes | Workers | Best for |
 |------|-------|---------|----------|
@@ -176,6 +194,7 @@ Once installed, these commands are available in any Claude Code instance:
 ```
 claude-code-tmux-team/
 ├── install.sh                   # Installer
+├── web-install.sh               # Self-contained web installer (curl | bash)
 ├── agents/
 │   ├── tmux-manager.md          # Manager agent definition → ~/.claude/agents/
 │   └── tmux-watchdog.md         # Watchdog agent definition → ~/.claude/agents/
@@ -194,7 +213,7 @@ claude-code-tmux-team/
 ├── commands/                    # Project-level commands → .claude/commands/
 │   └── (same tmux-*.md files)
 └── shell/
-    └── claude-team.sh           # Shell function that launches the session
+    └── claude-team.sh           # Smart launcher script → ~/.local/bin/claude-team
 ```
 
 </details>
