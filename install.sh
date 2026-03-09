@@ -70,7 +70,7 @@ echo ""
 printf "  ${BRAND}[1/4]${RESET} Creating directories..."
 {
   mkdir -p ~/.claude/agents
-  mkdir -p ~/.claude/skills
+  mkdir -p ~/.claude/commands
   mkdir -p ~/.claude/agent-memory/tmux-manager
   mkdir -p ~/.claude/agent-memory/tmux-watchdog
   mkdir -p ~/.local/bin
@@ -87,24 +87,24 @@ for f in "$SCRIPT_DIR/agents/"*.md; do
   detail "$(basename "$f" .md)"
 done
 
-# ── Step 3: Skills (slash commands) ───────────────────────────────────
-SKILL_COUNT=$(find "$SCRIPT_DIR/skills" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
-printf "  ${BRAND}[3/4]${RESET} Installing skills (${BOLD}%s${RESET} commands)..." "$SKILL_COUNT"
+# ── Step 3: Slash commands ───────────────────────────────────────────
+CMD_COUNT=$(find "$SCRIPT_DIR/commands" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+printf "  ${BRAND}[3/4]${RESET} Installing slash commands (${BOLD}%s${RESET})..." "$CMD_COUNT"
 {
-  cp "$SCRIPT_DIR/skills/"*.md ~/.claude/skills/
-} && step_ok || { step_fail; die "Failed to copy skills."; }
+  cp "$SCRIPT_DIR/commands/"*.md ~/.claude/commands/
+} && step_ok || { step_fail; die "Failed to copy commands."; }
 
-# Show skill names in a compact line
-SKILL_NAMES=""
-for f in "$SCRIPT_DIR/skills/"*.md; do
+# Show command names in a compact line
+CMD_NAMES=""
+for f in "$SCRIPT_DIR/commands/"*.md; do
   NAME=$(basename "$f" .md)
-  if [ -z "$SKILL_NAMES" ]; then
-    SKILL_NAMES="$NAME"
+  if [ -z "$CMD_NAMES" ]; then
+    CMD_NAMES="/$NAME"
   else
-    SKILL_NAMES="$SKILL_NAMES, $NAME"
+    CMD_NAMES="$CMD_NAMES, /$NAME"
   fi
 done
-detail "$SKILL_NAMES"
+detail "$CMD_NAMES"
 
 # ── Step 4: CLI script ───────────────────────────────────────────────
 printf "  ${BRAND}[4/4]${RESET} Installing claude-team command..."
@@ -132,7 +132,7 @@ printf "${SUCCESS}│${RESET}  ${SUCCESS}${BOLD}Installation complete!${RESET}  
 printf "${SUCCESS}│${RESET}                                            ${SUCCESS}│${RESET}\n"
 printf "${SUCCESS}│${RESET}  ${BOLD}Installed:${RESET}                                ${SUCCESS}│${RESET}\n"
 printf "${SUCCESS}│${RESET}    ${DIM}•${RESET} %s agent definitions                  ${SUCCESS}│${RESET}\n" "$AGENT_COUNT"
-printf "${SUCCESS}│${RESET}    ${DIM}•${RESET} %s slash commands                     ${SUCCESS}│${RESET}\n" "$SKILL_COUNT"
+printf "${SUCCESS}│${RESET}    ${DIM}•${RESET} %s slash commands                     ${SUCCESS}│${RESET}\n" "$CMD_COUNT"
 printf "${SUCCESS}│${RESET}    ${DIM}•${RESET} claude-team CLI                       ${SUCCESS}│${RESET}\n"
 printf "${SUCCESS}│${RESET}                                            ${SUCCESS}│${RESET}\n"
 printf "${SUCCESS}│${RESET}  ${BOLD}Quick start:${RESET}                              ${SUCCESS}│${RESET}\n"

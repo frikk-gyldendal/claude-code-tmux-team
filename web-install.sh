@@ -10,7 +10,7 @@ echo "  =================================="
 echo ""
 
 # Create directories
-mkdir -p ~/.claude/agents ~/.claude/skills ~/.claude/agent-memory/tmux-manager ~/.claude/agent-memory/tmux-watchdog
+mkdir -p ~/.claude/agents ~/.claude/commands ~/.claude/agent-memory/tmux-manager ~/.claude/agent-memory/tmux-watchdog
 mkdir -p ~/.local/bin
 
 # ── Agents ────────────────────────────────────────────────────────────
@@ -307,9 +307,9 @@ echo "  ✓ 2 agents installed"
 
 # ── Skills ─────────────────────────────────────────────────────────────
 
-echo "  Installing skills..."
+echo "  Installing slash commands..."
 
-cat > ~/.claude/skills/tmux-dispatch.md << 'SKILL_DISPATCH_EOF'
+cat > ~/.claude/commands/tmux-dispatch.md << 'SKILL_DISPATCH_EOF'
 # Skill: tmux-dispatch
 
 Send a task to one or more idle worker panes reliably. This is the primary dispatch primitive for the TMUX Manager.
@@ -433,7 +433,7 @@ If a task doesn't start after dispatch:
 3. If text is garbled: the pane might have been busy. Wait for idle, then retry.
 SKILL_DISPATCH_EOF
 
-cat > ~/.claude/skills/tmux-delegate.md << 'SKILL_DELEGATE_EOF'
+cat > ~/.claude/commands/tmux-delegate.md << 'SKILL_DELEGATE_EOF'
 # Skill: tmux-delegate
 
 Delegate a task to another Claude instance by sending it a prompt.
@@ -489,7 +489,7 @@ You are delegating a task to another Claude Code instance running in a TMUX pane
 - The target instance must be idle (waiting for input) for this to work
 SKILL_DELEGATE_EOF
 
-cat > ~/.claude/skills/tmux-monitor.md << 'SKILL_MONITOR_EOF'
+cat > ~/.claude/commands/tmux-monitor.md << 'SKILL_MONITOR_EOF'
 # Skill: tmux-monitor
 
 Smart monitoring of all worker panes — detects DONE, WORKING, ERROR, and IDLE states.
@@ -577,7 +577,7 @@ When a worker shows ERROR state:
 4. If a QUEUED worker hasn't started after 10s, send Enter again
 SKILL_MONITOR_EOF
 
-cat > ~/.claude/skills/tmux-restart-workers.md << 'SKILL_RESTART_EOF'
+cat > ~/.claude/commands/tmux-restart-workers.md << 'SKILL_RESTART_EOF'
 # Skill: tmux-restart-workers
 
 Restart all Claude Code worker instances (and the Watchdog) without restarting the Manager (pane 0.0). Useful when workers get logged out or need a fresh session.
@@ -679,7 +679,7 @@ You are restarting all Claude Code instances in the tmux team EXCEPT the Manager
 - The number of panes may vary — always discover dynamically from step 1
 SKILL_RESTART_EOF
 
-cat > ~/.claude/skills/tmux-manager-prompt.md << 'SKILL_MGRPROMPT_EOF'
+cat > ~/.claude/commands/tmux-manager-prompt.md << 'SKILL_MGRPROMPT_EOF'
 # TMUX Claude Manager System Prompt
 
 You are the **TMUX Claude Manager** (pane 0.0). You orchestrate a team of Claude Code instances running in parallel TMUX panes.
@@ -748,7 +748,7 @@ for f in /tmp/claude-team/status/*.status; do cat "$f"; echo "---"; done
 - Keep track of assignments so you don't double-assign work
 SKILL_MGRPROMPT_EOF
 
-cat > ~/.claude/skills/tmux-runner-prompt.md << 'SKILL_RUNPROMPT_EOF'
+cat > ~/.claude/commands/tmux-runner-prompt.md << 'SKILL_RUNPROMPT_EOF'
 # TMUX Claude Runner System Prompt
 
 You are the **TMUX Claude Runner** (pane 0.1). You continuously monitor all other Claude instances and keep them unblocked.
@@ -817,7 +817,7 @@ When you start, run a continuous monitoring cycle:
 - Only answer simple y/n and confirmation prompts — do not type task content
 SKILL_RUNPROMPT_EOF
 
-cat > ~/.claude/skills/tmux-team.md << 'SKILL_TEAM_EOF'
+cat > ~/.claude/commands/tmux-team.md << 'SKILL_TEAM_EOF'
 # Skill: tmux-team
 
 View the full team of Claude instances and their pane layout.
@@ -864,7 +864,7 @@ You are showing the team overview of all Claude Code instances running in TMUX.
    - Mark YOUR pane with `<-- you` indicator
 SKILL_TEAM_EOF
 
-cat > ~/.claude/skills/tmux-send.md << 'SKILL_SEND_EOF'
+cat > ~/.claude/commands/tmux-send.md << 'SKILL_SEND_EOF'
 # Skill: tmux-send
 
 Send a message to another Claude instance in TMUX.
@@ -910,7 +910,7 @@ You are sending a message to another Claude Code instance running in a TMUX pane
 This triggers the target Claude to check its inbox.
 SKILL_SEND_EOF
 
-cat > ~/.claude/skills/tmux-broadcast.md << 'SKILL_BROADCAST_EOF'
+cat > ~/.claude/commands/tmux-broadcast.md << 'SKILL_BROADCAST_EOF'
 # Skill: tmux-broadcast
 
 Broadcast a message to ALL other Claude instances in TMUX.
@@ -957,7 +957,7 @@ You are broadcasting a message to all other Claude Code instances in your TMUX s
 This notifies all other panes to check their inbox.
 SKILL_BROADCAST_EOF
 
-cat > ~/.claude/skills/tmux-inbox.md << 'SKILL_INBOX_EOF'
+cat > ~/.claude/commands/tmux-inbox.md << 'SKILL_INBOX_EOF'
 # Skill: tmux-inbox
 
 Check and read messages from other Claude instances.
@@ -994,7 +994,7 @@ You are checking your inbox for messages from other Claude Code instances in TMU
 6. If a message requires a response, ask the user if they want to reply using `/tmux-send`.
 SKILL_INBOX_EOF
 
-cat > ~/.claude/skills/tmux-status.md << 'SKILL_STATUS_EOF'
+cat > ~/.claude/commands/tmux-status.md << 'SKILL_STATUS_EOF'
 # Skill: tmux-status
 
 Share your status or check the status of other Claude instances.
@@ -1038,7 +1038,7 @@ done
 Display a summary table showing each pane, its status, and what task it's working on.
 SKILL_STATUS_EOF
 
-echo "  ✓ 11 skills installed"
+echo "  ✓ 11 slash commands installed"
 
 # ── Launcher Script ────────────────────────────────────────────────────
 
