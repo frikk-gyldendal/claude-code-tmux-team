@@ -58,7 +58,7 @@ else
 fi
 
 # Already installed?
-if [ -f ~/.claude/agents/tmux-manager.md ] && grep -q "claude-team.sh" ~/.zshrc ~/.bashrc ~/.profile 2>/dev/null; then
+if [ -f ~/.claude/agents/tmux-manager.md ] && [ -f ~/.local/bin/claude-team ]; then
   echo ""
   warn_msg "Claude Team appears to already be installed."
   printf "     ${DIM}Continuing will update all files to the latest version.${RESET}\n"
@@ -73,6 +73,7 @@ printf "  ${BRAND}[1/4]${RESET} Creating directories..."
   mkdir -p ~/.claude/skills
   mkdir -p ~/.claude/agent-memory/tmux-manager
   mkdir -p ~/.claude/agent-memory/tmux-watchdog
+  mkdir -p ~/.local/bin
 } && step_ok || { step_fail; die "Failed to create directories."; }
 
 # ── Step 2: Agent definitions ─────────────────────────────────────────
@@ -105,34 +106,22 @@ for f in "$SCRIPT_DIR/skills/"*.md; do
 done
 detail "$SKILL_NAMES"
 
-# ── Step 4: Shell function ────────────────────────────────────────────
-SHELL_FUNC="$SCRIPT_DIR/shell/claude-team.sh"
+# ── Step 4: CLI script ───────────────────────────────────────────────
+printf "  ${BRAND}[4/4]${RESET} Installing claude-team command..."
+{
+  cp "$SCRIPT_DIR/shell/claude-team.sh" ~/.local/bin/claude-team
+  chmod +x ~/.local/bin/claude-team
+} && step_ok || { step_fail; die "Failed to install claude-team to ~/.local/bin."; }
+detail "~/.local/bin/claude-team"
 
-# Detect shell config file
-if [[ -f ~/.zshrc ]]; then
-  SHELL_RC=~/.zshrc
-elif [[ -f ~/.bashrc ]]; then
-  SHELL_RC=~/.bashrc
-else
-  SHELL_RC=~/.profile
-fi
-
-SHELL_RC_NAME=$(basename "$SHELL_RC")
-
-if ! grep -q "claude-team.sh" "$SHELL_RC" 2>/dev/null; then
-  printf "  ${BRAND}[4/4]${RESET} Installing shell function..."
-  {
-    echo "" >> "$SHELL_RC"
-    echo "# TMUX Claude Team" >> "$SHELL_RC"
-    echo "source \"$SHELL_FUNC\"" >> "$SHELL_RC"
-  } && step_ok || { step_fail; die "Failed to update $SHELL_RC."; }
-  detail "Added to ~/$SHELL_RC_NAME"
-  SHELL_UPDATED=true
-else
-  printf "  ${BRAND}[4/4]${RESET} Shell function already configured..."
-  step_ok
-  detail "Already in ~/$SHELL_RC_NAME"
-  SHELL_UPDATED=false
+# Check if ~/.local/bin is on PATH
+PATH_OK=true
+if ! echo "$PATH" | tr ':' '\n' | grep -qx "$HOME/.local/bin"; then
+  PATH_OK=false
+  echo ""
+  warn_msg "~/.local/bin is not in your PATH"
+  printf "     ${DIM}Add to your shell config (~/.zshrc or ~/.bashrc):${RESET}\n"
+  printf "     ${BRAND}export PATH=\"\$HOME/.local/bin:\$PATH\"${RESET}\n"
 fi
 
 # ── Summary ───────────────────────────────────────────────────────────
@@ -144,16 +133,17 @@ printf "${SUCCESS}│${RESET}                                            ${SUCCE
 printf "${SUCCESS}│${RESET}  ${BOLD}Installed:${RESET}                                ${SUCCESS}│${RESET}\n"
 printf "${SUCCESS}│${RESET}    ${DIM}•${RESET} %s agent definitions                  ${SUCCESS}│${RESET}\n" "$AGENT_COUNT"
 printf "${SUCCESS}│${RESET}    ${DIM}•${RESET} %s slash commands                     ${SUCCESS}│${RESET}\n" "$SKILL_COUNT"
-printf "${SUCCESS}│${RESET}    ${DIM}•${RESET} claude-team shell function            ${SUCCESS}│${RESET}\n"
+printf "${SUCCESS}│${RESET}    ${DIM}•${RESET} claude-team CLI                       ${SUCCESS}│${RESET}\n"
 printf "${SUCCESS}│${RESET}                                            ${SUCCESS}│${RESET}\n"
-printf "${SUCCESS}│${RESET}  ${BOLD}Next steps:${RESET}                               ${SUCCESS}│${RESET}\n"
-if [ "$SHELL_UPDATED" = true ]; then
-  printf "${SUCCESS}│${RESET}    1. ${BRAND}source ~/%s${RESET}%-*s${SUCCESS}│${RESET}\n" "$SHELL_RC_NAME" $((21 - ${#SHELL_RC_NAME})) ""
+printf "${SUCCESS}│${RESET}  ${BOLD}Quick start:${RESET}                              ${SUCCESS}│${RESET}\n"
+if [ "$PATH_OK" = false ]; then
+  printf "${SUCCESS}│${RESET}    ${WARN}1. Add ~/.local/bin to PATH (see above)${RESET} ${SUCCESS}│${RESET}\n"
+  printf "${SUCCESS}│${RESET}    2. ${BRAND}cd /your/project${RESET}                      ${SUCCESS}│${RESET}\n"
+  printf "${SUCCESS}│${RESET}    3. ${BRAND}claude-team${RESET}                            ${SUCCESS}│${RESET}\n"
 else
-  printf "${SUCCESS}│${RESET}    1. ${DIM}(shell already configured)${RESET}            ${SUCCESS}│${RESET}\n"
+  printf "${SUCCESS}│${RESET}    1. ${BRAND}cd /your/project${RESET}                      ${SUCCESS}│${RESET}\n"
+  printf "${SUCCESS}│${RESET}    2. ${BRAND}claude-team${RESET}                            ${SUCCESS}│${RESET}\n"
 fi
-printf "${SUCCESS}│${RESET}    2. ${BRAND}cd /your/project${RESET}                      ${SUCCESS}│${RESET}\n"
-printf "${SUCCESS}│${RESET}    3. ${BRAND}claude-team${RESET}                            ${SUCCESS}│${RESET}\n"
 printf "${SUCCESS}│${RESET}                                            ${SUCCESS}│${RESET}\n"
 printf "${SUCCESS}└────────────────────────────────────────────┘${RESET}\n"
 echo ""
