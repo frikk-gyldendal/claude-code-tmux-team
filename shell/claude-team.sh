@@ -8,6 +8,10 @@ set -euo pipefail
 #   claude-team init         # Register current directory as a project
 #   claude-team list         # Show all registered projects + status
 #   claude-team stop         # Stop session for current project
+#   claude-team update       # Pull latest + reinstall (alias: reinstall)
+#   claude-team doctor       # Check installation health & prerequisites
+#   claude-team remove NAME  # Unregister a project from the registry
+#   claude-team version      # Show version and install info
 #   claude-team 4x3          # Launch/reattach with specific grid
 #   claude-team --help       # Show usage
 #
@@ -418,6 +422,175 @@ MANIFEST
   tmux attach -t "$session"
 }
 
+# ── Update / Reinstall ───────────────────────────────────────────────
+update_system() {
+  local repo_path_file="$HOME/.claude/claude-team/repo-path"
+  local repo_dir
+
+  if [[ ! -f "$repo_path_file" ]]; then
+    printf "  ${ERROR}Could not find the claude-code-tmux-team repo.${RESET}\n"
+    printf "  Run ${BOLD}./install.sh${RESET} from the repo to register its location.\n"
+    exit 1
+  fi
+
+  repo_dir="$(cat "$repo_path_file")"
+  if [[ ! -d "$repo_dir" ]]; then
+    printf "  ${ERROR}Could not find the claude-code-tmux-team repo.${RESET}\n"
+    printf "  Run ${BOLD}./install.sh${RESET} from the repo to register its location.\n"
+    exit 1
+  fi
+
+  printf "  ${BRAND}Updating claude-code-tmux-team...${RESET}\n"
+  printf '\n'
+
+  printf "  ${DIM}Pulling latest changes...${RESET}\n"
+  if ! git -C "$repo_dir" pull; then
+    printf "  ${WARN}git pull failed — continuing with reinstall${RESET}\n"
+  fi
+  printf '\n'
+
+  printf "  ${DIM}Running install.sh...${RESET}\n"
+  bash "$repo_dir/install.sh"
+  printf '\n'
+
+  printf "  ${SUCCESS}Update complete.${RESET}\n"
+  printf "  Running sessions need a restart: ${BOLD}claude-team stop && claude-team${RESET}\n"
+}
+
+# ── Doctor — check installation health ────────────────────────────────
+check_doctor() {
+  printf '\n'
+  printf "  ${BRAND}Claude Team — System Check${RESET}\n"
+  printf '\n'
+
+  # tmux
+  if command -v tmux &>/dev/null; then
+    printf "  ${SUCCESS}✓${RESET} tmux installed  ${DIM}$(tmux -V)${RESET}\n"
+  else
+    printf "  ${ERROR}✗${RESET} tmux not installed\n"
+  fi
+
+  # claude CLI
+  if command -v claude &>/dev/null; then
+    printf "  ${SUCCESS}✓${RESET} claude CLI installed  ${DIM}$(claude --version 2>/dev/null || echo 'unknown version')${RESET}\n"
+  else
+    printf "  ${WARN}⚠${RESET} claude CLI not found in PATH\n"
+  fi
+
+  # ~/.local/bin in PATH
+  if echo "$PATH" | tr ':' '\n' | grep -qx "$HOME/.local/bin"; then
+    printf "  ${SUCCESS}✓${RESET} ~/.local/bin is in PATH\n"
+  else
+    printf "  ${WARN}⚠${RESET} ~/.local/bin is not in PATH\n"
+  fi
+
+  # Agents installed
+  if [[ -f "$HOME/.claude/agents/tmux-manager.md" ]]; then
+    printf "  ${SUCCESS}✓${RESET} Agents installed  ${DIM}~/.claude/agents/tmux-manager.md${RESET}\n"
+  else
+    printf "  ${ERROR}✗${RESET} Agents not installed  ${DIM}~/.claude/agents/tmux-manager.md missing${RESET}\n"
+  fi
+
+  # Commands installed
+  if [[ -f "$HOME/.claude/commands/tmux-dispatch.md" ]]; then
+    printf "  ${SUCCESS}✓${RESET} Commands installed  ${DIM}~/.claude/commands/tmux-dispatch.md${RESET}\n"
+  else
+    printf "  ${ERROR}✗${RESET} Commands not installed  ${DIM}~/.claude/commands/tmux-dispatch.md missing${RESET}\n"
+  fi
+
+  # CLI installed
+  if [[ -f "$HOME/.local/bin/claude-team" ]]; then
+    printf "  ${SUCCESS}✓${RESET} CLI installed  ${DIM}~/.local/bin/claude-team${RESET}\n"
+  else
+    printf "  ${ERROR}✗${RESET} CLI not installed  ${DIM}~/.local/bin/claude-team missing${RESET}\n"
+  fi
+
+  # Repo path
+  local repo_path_file="$HOME/.claude/claude-team/repo-path"
+  if [[ -f "$repo_path_file" ]]; then
+    local repo_dir
+    repo_dir="$(cat "$repo_path_file")"
+    if [[ -d "$repo_dir" ]]; then
+      printf "  ${SUCCESS}✓${RESET} Repo registered  ${DIM}${repo_dir}${RESET}\n"
+    else
+      printf "  ${ERROR}✗${RESET} Repo path registered but directory missing  ${DIM}${repo_dir}${RESET}\n"
+    fi
+  else
+    printf "  ${ERROR}✗${RESET} Repo path not registered  ${DIM}~/.claude/claude-team/repo-path missing${RESET}\n"
+  fi
+
+  printf '\n'
+}
+
+# ── Remove — unregister a project ────────────────────────────────────
+remove_project() {
+  local name="${1:-}"
+
+  # If no argument, try current directory
+  if [[ -z "$name" ]]; then
+    name="$(find_project "$(pwd)")"
+  fi
+
+  # Still no name — error with hint
+  if [[ -z "$name" ]]; then
+    printf "  ${ERROR}No project specified and no project registered for $(pwd)${RESET}\n"
+    printf '\n'
+    printf "  ${DIM}Registered projects:${RESET}\n"
+    while IFS=: read -r pname ppath; do
+      [[ -z "$pname" ]] && continue
+      printf "    ${BOLD}${pname}${RESET}  ${DIM}${ppath}${RESET}\n"
+    done < "$PROJECTS_FILE"
+    printf '\n'
+    printf "  Usage: ${BOLD}claude-team remove <name>${RESET}\n"
+    return 1
+  fi
+
+  # Check if project exists in registry
+  if ! grep -q "^${name}:" "$PROJECTS_FILE" 2>/dev/null; then
+    printf "  ${ERROR}No project named '${name}' in registry${RESET}\n"
+    return 1
+  fi
+
+  # Remove matching line
+  sed -i '' "/^${name}:/d" "$PROJECTS_FILE"
+  printf "  ${SUCCESS}Removed '${name}' from project registry${RESET}\n"
+
+  # Hint about running session
+  if session_exists "ct-${name}"; then
+    printf "  ${WARN}Session ct-${name} is still running. Use 'claude-team stop' in that directory to stop it.${RESET}\n"
+  fi
+}
+
+# ── Version — show installation info ─────────────────────────────────
+show_version() {
+  printf '\n'
+  printf "  ${BRAND}Claude Code TMUX Team${RESET}\n"
+  printf '\n'
+
+  local repo_path_file="$HOME/.claude/claude-team/repo-path"
+  if [[ -f "$repo_path_file" ]]; then
+    local repo_dir
+    repo_dir="$(cat "$repo_path_file")"
+    if [[ -d "$repo_dir" ]]; then
+      local version_info
+      version_info="$(git -C "$repo_dir" log -1 --format="%h (%ci)" 2>/dev/null || echo 'unknown')"
+      printf "  ${DIM}Version${RESET}    ${BOLD}${version_info}${RESET}\n"
+    fi
+  fi
+
+  printf "  ${DIM}Agents${RESET}     ${BOLD}~/.claude/agents/${RESET}\n"
+  printf "  ${DIM}Commands${RESET}   ${BOLD}~/.claude/commands/${RESET}\n"
+  printf "  ${DIM}CLI${RESET}        ${BOLD}~/.local/bin/claude-team${RESET}\n"
+
+  local project_count=0
+  if [[ -f "$PROJECTS_FILE" ]]; then
+    project_count="$(grep -c '.' "$PROJECTS_FILE" 2>/dev/null || echo 0)"
+  fi
+  printf "  ${DIM}Projects${RESET}   ${BOLD}${project_count} registered${RESET}\n"
+
+  printf '\n'
+}
+
 # ── Main Dispatch ─────────────────────────────────────────────────────
 
 grid=""
@@ -435,6 +608,10 @@ case "${1:-}" in
     init       Register current directory as a project
     list       Show all registered projects and their status
     stop       Stop the session for the current project
+    update     Pull latest changes and reinstall (alias: reinstall)
+    doctor     Check installation health and prerequisites
+    remove     Unregister a project (by name, or current dir)
+    version    Show version and installation info
     --help     Show this help
 
   Grid:
@@ -447,6 +624,10 @@ case "${1:-}" in
     claude-team 4x3          # launch with 4x3 grid
     claude-team list         # show all projects
     claude-team stop         # stop current project session
+    claude-team update       # pull latest + reinstall
+    claude-team doctor       # check system health
+    claude-team remove myapp # unregister a project
+    claude-team version      # show install info
 HELP
     printf '\n'
     exit 0
@@ -462,6 +643,22 @@ HELP
   stop)
     stop_project
     exit $?
+    ;;
+  update|reinstall)
+    update_system
+    exit 0
+    ;;
+  doctor)
+    check_doctor
+    exit 0
+    ;;
+  remove)
+    remove_project "${2:-}"
+    exit 0
+    ;;
+  version|--version|-v)
+    show_version
+    exit 0
     ;;
   [0-9]*x[0-9]*)
     grid="$1"
