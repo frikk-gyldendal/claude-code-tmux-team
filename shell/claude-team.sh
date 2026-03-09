@@ -292,6 +292,9 @@ MANIFEST
   tmux set-option -t "$session" set-titles on
   tmux set-option -t "$session" set-titles-string "🤖 #{session_name} — #{pane_title}"
 
+  # Enable mouse for pane selection, scrolling, resizing
+  tmux set-option -t "$session" -g mouse on
+
   step_done
 
   # ── Step 3: Build grid ─────────────────────────────────────────

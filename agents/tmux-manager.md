@@ -51,20 +51,20 @@ source "${RUNTIME_DIR}/session.env"
 
 ### Discover your team
 ```bash
-# List all panes (use $SESSION from manifest)
-tmux list-panes -s -t "$SESSION" -F '#{pane_index} #{pane_title} #{pane_pid}'
+# List all panes (use $SESSION_NAME from manifest)
+tmux list-panes -s -t "$SESSION_NAME" -F '#{pane_index} #{pane_title} #{pane_pid}'
 ```
 
 ### Check if a worker is idle (ready for a task)
 ```bash
 # Capture last 3 lines — if you see the ">" input prompt, the worker is idle
-tmux capture-pane -t "$SESSION:0.4" -p -S -3
+tmux capture-pane -t "$SESSION_NAME:0.4" -p -S -3
 ```
 
 ### Send a task to a worker
 ```bash
 # Short task (< ~200 chars, no special chars)
-tmux send-keys -t "$SESSION:0.4" "Your task here" Enter
+tmux send-keys -t "$SESSION_NAME:0.4" "Your task here" Enter
 
 # Long task — use load-buffer to avoid escaping issues
 mkdir -p "${RUNTIME_DIR}"
@@ -74,9 +74,9 @@ Detailed multi-line task description here.
 Include file paths, acceptance criteria, and constraints.
 TASK
 tmux load-buffer "$TASKFILE"
-tmux paste-buffer -t "$SESSION:0.4"
+tmux paste-buffer -t "$SESSION_NAME:0.4"
 sleep 0.5
-tmux send-keys -t "$SESSION:0.4" Enter
+tmux send-keys -t "$SESSION_NAME:0.4" Enter
 rm "$TASKFILE"
 ```
 
@@ -86,17 +86,17 @@ rm "$TASKFILE"
 After dispatching, wait 5s then check the worker started:
 ```bash
 sleep 5
-tmux capture-pane -t "$SESSION:0.4" -p -S -5
+tmux capture-pane -t "$SESSION_NAME:0.4" -p -S -5
 ```
 If the pasted text is visible but the worker hasn't started processing, send Enter again:
 ```bash
-tmux send-keys -t "$SESSION:0.4" Enter
+tmux send-keys -t "$SESSION_NAME:0.4" Enter
 ```
 
 ### Monitor a worker's progress
 ```bash
 # See the last 80 lines of a worker's output
-tmux capture-pane -t "$SESSION:0.4" -p -S -80
+tmux capture-pane -t "$SESSION_NAME:0.4" -p -S -80
 ```
 
 ### Monitor all workers at once
@@ -106,7 +106,7 @@ RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f
 source "${RUNTIME_DIR}/session.env"
 for i in $(echo "$WORKER_PANES" | tr ',' ' '); do
   echo "=== Worker 0.$i ==="
-  tmux capture-pane -t "$SESSION:0.$i" -p -S -5 2>/dev/null
+  tmux capture-pane -t "$SESSION_NAME:0.$i" -p -S -5 2>/dev/null
   echo ""
 done
 ```
@@ -185,7 +185,7 @@ You are Worker N on the Claude Team working on PROJECT_NAME.
 ## Rules
 
 1. **Never implement code yourself** — always delegate to a worker
-2. **Never touch pane 0.1** — the Watchdog manages itself
+2. **Never touch the Watchdog pane** — its index is in the manifest as WATCHDOG_PANE
 3. **Always check if a worker is idle** before sending a task — don't interrupt ongoing work
 4. **Write self-contained prompts** — workers have zero context about the master plan
 5. **Track state** — maintain a mental map of worker → task → status

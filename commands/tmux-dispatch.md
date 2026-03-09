@@ -158,8 +158,8 @@ This works because `send-keys` with a non-empty string + Enter is reliable. The 
 2. **Always `sleep 0.5`** between `paste-buffer` and `send-keys Enter`
 3. **Always check idle first** — don't interrupt a working pane
 4. **Always verify after dispatch** — confirm the worker started processing
-5. **Never touch pane 0.1** — that's the Watchdog
-6. **Workers are 0.2 through 0.11** — 10 workers max
+5. **Never touch the Watchdog pane** — its index is in the manifest as `WATCHDOG_PANE`
+6. **Worker pane indices are in the manifest** as `WORKER_PANES` — always read from manifest, never hardcode
 7. **Always include project context in every task prompt** — workers need to know the project name, directory, and that paths should be absolute
 8. **Read the manifest first** — discover runtime dir and source session.env before dispatching
 

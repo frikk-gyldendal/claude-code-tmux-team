@@ -31,7 +31,7 @@ You are broadcasting a message to all other Claude Code instances in your TMUX s
    EOF
    ```
 
-4. Send the `/tmux-inbox-broadcast` trigger to every OTHER pane in the session:
+4. Send the `/tmux-inbox` trigger to every OTHER pane in the session:
    ```bash
    for pane in $(tmux list-panes -s -t "$MY_SESSION" -F '#{session_name}:#{window_index}.#{pane_index}'); do
      if [ "$pane" != "$MY_PANE" ]; then

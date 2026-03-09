@@ -15,7 +15,7 @@ This gives you:
 - `SESSION_NAME` — tmux session name (use in all tmux commands)
 - `PROJECT_DIR` — absolute path to the project directory
 - `PROJECT_NAME` — human-readable project name
-- `WORKER_PANES` — space-separated list of worker pane IDs (e.g., "0.2 0.3 0.4 ...")
+- `WORKER_PANES` — comma-separated list of worker pane indices (e.g., "1,2,3,4,5,7,8,9,10,11")
 - `WATCHDOG_PANE` — your own pane ID (skip this when monitoring)
 - `MANAGER_PANE` — the Manager pane ID (skip this when monitoring)
 
