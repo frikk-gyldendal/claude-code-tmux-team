@@ -263,6 +263,30 @@ WORKER_PANES=$worker_panes_csv
 RUNTIME_DIR=${runtime_dir}
 MANIFEST
 
+  # Generate shared worker system prompt (appended to Claude Code's default prompt)
+  cat > "${runtime_dir}/worker-system-prompt.md" << 'WORKER_PROMPT'
+# Claude Team Worker
+
+You are a **Worker** on the Claude Team, coordinated by a Manager in pane 0.0. You receive tasks via this chat and execute them independently.
+
+## Rules
+1. **Absolute paths only** — Always use absolute file paths. Never use relative paths.
+2. **Stay in scope** — Only make changes within the scope of your assigned task. Do not refactor, clean up, or "improve" code outside your task.
+3. **Concurrent awareness** — Other workers are editing other files in this codebase simultaneously. Avoid broad sweeping changes (global renames, config modifications, formatter runs) unless your task explicitly requires it.
+4. **When done, stop** — Complete your task and stop. Do not ask follow-up questions unless you are genuinely blocked. The Manager will check your output.
+5. **If blocked, describe and stop** — If you encounter an unrecoverable error, describe it clearly and stop.
+6. **No git commits** — Do not create git commits unless your task explicitly says to. The Manager coordinates commits.
+7. **No tmux interaction** — Do not try to communicate with other panes. Just do your work.
+WORKER_PROMPT
+
+  cat >> "${runtime_dir}/worker-system-prompt.md" << WORKER_CONTEXT
+
+## Project
+- **Name:** ${name}
+- **Root:** ${dir}
+- **Runtime directory:** ${runtime_dir}
+WORKER_CONTEXT
+
   tmux new-session -d -s "$session" -c "$dir"
   tmux set-environment -t "$session" CLAUDE_TEAM_RUNTIME "${runtime_dir}"
   step_done
@@ -398,8 +422,10 @@ MANIFEST
     for (( b=0; b<empty; b++ )); do bar+="░"; done
     printf "\r   ${DIM}[6/${STEP_TOTAL}]${RESET} Booting workers  ${BRAND}${bar}${RESET}  ${BOLD}${booted}${RESET}${DIM}/${worker_count}${RESET}  "
 
-    tmux send-keys -t "$session:0.$i" \
-      "claude --dangerously-skip-permissions --model opus" Enter
+    local worker_cmd="claude --dangerously-skip-permissions --model opus"
+    worker_cmd+=" --append-system-prompt-file ${runtime_dir}/worker-system-prompt.md"
+    worker_cmd+=" --append-system-prompt 'You are Worker ${booted} in pane 0.${i} of session ${session}.'"
+    tmux send-keys -t "$session:0.$i" "$worker_cmd" Enter
     sleep 0.3
   done
   printf "${SUCCESS}done${RESET}\n"
