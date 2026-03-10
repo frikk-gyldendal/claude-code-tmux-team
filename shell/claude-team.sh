@@ -422,9 +422,13 @@ WORKER_CONTEXT
     for (( b=0; b<empty; b++ )); do bar+="░"; done
     printf "\r   ${DIM}[6/${STEP_TOTAL}]${RESET} Booting workers  ${BRAND}${bar}${RESET}  ${BOLD}${booted}${RESET}${DIM}/${worker_count}${RESET}  "
 
+    # Create per-worker system prompt file (base prompt + worker identity)
+    local worker_prompt_file="${runtime_dir}/worker-system-prompt-${booted}.md"
+    cp "${runtime_dir}/worker-system-prompt.md" "$worker_prompt_file"
+    printf '\n\n## Identity\nYou are Worker %s in pane 0.%s of session %s.\n' "$booted" "$i" "$session" >> "$worker_prompt_file"
+
     local worker_cmd="claude --dangerously-skip-permissions --model opus"
-    worker_cmd+=" --append-system-prompt-file ${runtime_dir}/worker-system-prompt.md"
-    worker_cmd+=" --append-system-prompt 'You are Worker ${booted} in pane 0.${i} of session ${session}.'"
+    worker_cmd+=" --append-system-prompt-file ${worker_prompt_file}"
     tmux send-keys -t "$session:0.$i" "$worker_cmd" Enter
     sleep 0.3
   done
