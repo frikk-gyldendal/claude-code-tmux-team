@@ -1,4 +1,4 @@
-Restart all Claude Code worker instances (and the Watchdog) without restarting the Manager (pane 0.0). Useful when workers get logged out or need a fresh session.
+Restart all Claude Code worker instances (and the Watchdog) without restarting the Manager (pane 0.0). Uses process-based killing (not keystrokes) and deterministic verify loops.
 
 ## Steps
 
@@ -7,76 +7,96 @@ Restart all Claude Code worker instances (and the Watchdog) without restarting t
    RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
    source "${RUNTIME_DIR}/session.env"
    ```
-   This gives you these variables for use in all subsequent commands:
+   This gives you:
    - `SESSION_NAME` — tmux session name
    - `WATCHDOG_PANE` — watchdog pane index
    - `WORKER_PANES` — comma-separated worker pane indices
    - `TOTAL_PANES` — total pane count
 
-   Use `$SESSION_NAME` for all tmux `-t` targets below. Use `$WATCHDOG_PANE` for the Watchdog pane index. Use `$WORKER_PANES` (comma-separated) for all worker pane loops.
-
-2. **Discover all panes** (excluding yourself at 0.0):
+   Build the combined pane list for all subsequent steps:
    ```bash
-   tmux list-panes -s -t "$SESSION_NAME" -F '#{pane_index} #{pane_title} #{pane_pid}'
-   ```
-   Confirm the Watchdog and Worker pane indices match the manifest.
-
-3. **Kill all Claude processes in worker + watchdog panes** by sending `/exit` to each:
-   ```bash
-   # Build list of all non-manager panes (watchdog + workers)
    ALL_PANES="$WATCHDOG_PANE $(echo "$WORKER_PANES" | tr ',' ' ')"
-   for i in $ALL_PANES; do
-     tmux send-keys -t "$SESSION_NAME:0.$i" "/exit" Enter 2>/dev/null
-   done
-   ```
-   Wait a few seconds for them to exit:
-   ```bash
-   sleep 5
    ```
 
-4. **Verify they exited** — capture each pane and check for a shell prompt (`$` or `%`):
+2. **Phase 1: KILL — Kill Claude processes by PID.** Do NOT use `/exit` or `send-keys` — they are unreliable (Claude may be mid-tool-call, stuck, or unresponsive, and the `/exit` gets silently dropped). Instead, kill the child process of each pane's shell:
    ```bash
    for i in $ALL_PANES; do
-     echo "=== Pane 0.$i ==="
-     tmux capture-pane -t "$SESSION_NAME:0.$i" -p -S -3 2>/dev/null
+     PANE_PID=$(tmux display-message -t "$SESSION_NAME:0.$i" -p '#{pane_pid}')
+     CHILD_PID=$(pgrep -P "$PANE_PID" 2>/dev/null)
+     if [ -n "$CHILD_PID" ]; then
+       kill "$CHILD_PID" 2>/dev/null
+     fi
    done
    ```
-   If any still show Claude running, send `Ctrl+C` then `/exit`:
+   Wait for processes to die:
    ```bash
-   tmux send-keys -t "$SESSION_NAME:0.X" C-c
-   sleep 1
-   tmux send-keys -t "$SESSION_NAME:0.X" "/exit" Enter
+   sleep 3
    ```
 
-5. **Clear all pane terminals** so the new sessions start clean:
+3. **Phase 2: VERIFY KILLED — Retry loop confirming no child processes remain.** Run this loop with max 5 attempts, 2 seconds apart. Check using `pgrep` (process-based), NOT by grepping pane output (which is unreliable). If any remain after SIGTERM, escalate to SIGKILL:
+   ```bash
+   for attempt in 1 2 3 4 5; do
+     STILL_RUNNING=0
+     STUCK_PANES=""
+     for i in $ALL_PANES; do
+       PANE_PID=$(tmux display-message -t "$SESSION_NAME:0.$i" -p '#{pane_pid}')
+       CHILD_PID=$(pgrep -P "$PANE_PID" 2>/dev/null)
+       if [ -n "$CHILD_PID" ]; then
+         STILL_RUNNING=$((STILL_RUNNING + 1))
+         STUCK_PANES="$STUCK_PANES 0.$i"
+         kill -9 "$CHILD_PID" 2>/dev/null
+       fi
+     done
+     if [ "$STILL_RUNNING" -eq 0 ]; then
+       break
+     fi
+     sleep 2
+   done
+   ```
+   After the loop, check `$STILL_RUNNING`. If it is NOT 0, report: "FAILED: Panes $STUCK_PANES still have processes after 5 kill attempts. Manual intervention needed." and STOP here — do not continue.
+
+4. **Phase 3: CLEAR — Clean all pane terminals** so new sessions start fresh:
    ```bash
    for i in $ALL_PANES; do
      tmux send-keys -t "$SESSION_NAME:0.$i" "clear" Enter 2>/dev/null
    done
-   sleep 0.5
+   sleep 1
    ```
 
-6. **Restart the Watchdog pane first**:
+5. **Phase 4: START — Launch all instances.** Start the Watchdog first, then workers with 0.5s gaps:
    ```bash
-   tmux send-keys -t "$SESSION_NAME:0.$WATCHDOG_PANE" "claude --dangerously-skip-permissions --agent tmux-watchdog" Enter
-   ```
-
-7. **Restart all Worker panes**:
-   ```bash
+   tmux send-keys -t "$SESSION_NAME:0.$WATCHDOG_PANE" "claude --dangerously-skip-permissions --model haiku --agent tmux-watchdog" Enter
+   sleep 1
    for i in $(echo "$WORKER_PANES" | tr ',' ' '); do
      tmux send-keys -t "$SESSION_NAME:0.$i" "claude --dangerously-skip-permissions --model opus" Enter
-     sleep 0.3
+     sleep 0.5
    done
    ```
 
-8. **Wait for workers to initialize** (about 10 seconds):
+6. **Phase 5: VERIFY STARTED — Retry loop confirming Claude is running in all panes.** Claude can take 30–60s to boot. Run this loop with max 10 attempts, 5 seconds apart. Use `pgrep` to check for a child process, AND capture pane output to confirm Claude's UI is visible. A pane is ready when it has a child process AND `tmux capture-pane -t "$SESSION_NAME:0.$i" -p` (full visible pane, no `-S` flag) contains `bypass permissions`:
    ```bash
-   sleep 10
+   for attempt in 1 2 3 4 5 6 7 8 9 10; do
+     NOT_READY=0
+     DOWN_PANES=""
+     for i in $ALL_PANES; do
+       PANE_PID=$(tmux display-message -t "$SESSION_NAME:0.$i" -p '#{pane_pid}')
+       CHILD_PID=$(pgrep -P "$PANE_PID" 2>/dev/null)
+       OUTPUT=$(tmux capture-pane -t "$SESSION_NAME:0.$i" -p 2>/dev/null)
+       if [ -z "$CHILD_PID" ] || ! echo "$OUTPUT" | grep -q "bypass permissions"; then
+         NOT_READY=$((NOT_READY + 1))
+         DOWN_PANES="$DOWN_PANES 0.$i"
+       fi
+     done
+     if [ "$NOT_READY" -eq 0 ]; then
+       break
+     fi
+     sleep 5
+   done
    ```
+   Report which panes came up and which didn't.
 
-9. **Send the Watchdog its monitoring instruction** — tell it which panes to monitor:
+7. **Phase 6: INSTRUCT WATCHDOG** — Send the monitoring instruction to the Watchdog pane:
    ```bash
-   # Build human-readable list of worker panes
    WORKER_LIST=""
    for i in $(echo "$WORKER_PANES" | tr ',' ' '); do
      [[ -n "$WORKER_LIST" ]] && WORKER_LIST+=", "
@@ -85,19 +105,22 @@ Restart all Claude Code worker instances (and the Watchdog) without restarting t
    tmux send-keys -t "$SESSION_NAME:0.$WATCHDOG_PANE" "Start monitoring. Total panes: $TOTAL_PANES. Skip pane 0.0 (Manager) and 0.$WATCHDOG_PANE (yourself). Monitor panes ${WORKER_LIST}." Enter
    ```
 
-10. **Verify workers are up** — check panes to confirm Claude started:
-    ```bash
-    sleep 5
-    for i in $(echo "$WORKER_PANES" | tr ',' ' '); do
-      echo "=== Worker 0.$i ==="
-      tmux capture-pane -t "$SESSION_NAME:0.$i" -p -S -3 2>/dev/null
-    done
-    ```
-
-11. **Report results** — show a summary table of each pane and whether it came back online.
+8. **Phase 7: FINAL REPORT** — Show a clean status table. For each pane in `$ALL_PANES`, use the verified state from Phase 5:
+   ```
+   Pane    Role        Status
+   0.1     Worker      ✅ UP  (or ❌ DOWN)
+   0.2     Worker      ✅ UP
+   ...
+   0.N     Watchdog    ✅ UP
+   ```
+   Use the Watchdog pane index to label it "Watchdog"; all others are "Worker".
 
 ## Important Notes
 - NEVER restart pane 0.0 — that's you (the Manager)
-- The Watchdog uses `--agent tmux-watchdog`, workers use plain `--dangerously-skip-permissions`
+- The Watchdog uses `--model haiku --agent tmux-watchdog`, workers use `--model opus`
 - If a worker shows "Not logged in", run `/login` on it: `tmux send-keys -t "$SESSION_NAME:0.X" "/login" Enter`
 - Pane counts and indices are dynamic — always read from the manifest, never hardcode
+- If the VERIFY KILLED phase fails, do NOT proceed — report the stuck panes and stop
+- All `sleep` durations are intentional — do not shorten them
+- **NEVER use `/exit` or `send-keys` to kill Claude** — it is unreliable. Always kill by PID using `pgrep -P #{pane_pid}` + `kill`
+- **NEVER use `tmux capture-pane -S -N`** for detection — it captures scroll buffer which may be empty. Use `tmux capture-pane -p` (full visible pane) instead
