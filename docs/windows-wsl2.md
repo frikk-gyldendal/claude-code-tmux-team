@@ -50,7 +50,7 @@ claude-team init
 claude-team
 ```
 
-That's it — from here, the experience is identical to macOS and Linux.
+That's it — from here, the experience is identical to macOS and Linux. Follow the [Quick Start](../README.md#quick-start) in the main README for usage instructions.
 
 ### Tips for WSL2 Users
 

@@ -57,6 +57,8 @@ cd claude-code-tmux-team && ./install.sh
 
 The installer validates prerequisites automatically (Claude Code CLI, tmux, shell config) and provides clear feedback with colored output.
 
+> **Other platforms:** For Linux server deployment, see [docs/linux-server.md](docs/linux-server.md). For Windows (WSL2), see [docs/windows-wsl2.md](docs/windows-wsl2.md).
+
 **Launch:**
 
 ```bash
@@ -80,7 +82,7 @@ When you run `claude-team`, the startup sequence gives you full visibility into 
 
 Once the summary appears, switch to the Manager pane (`0.0`) and start giving it tasks.
 
-> Run `claude-team` to see the premium startup experience. Demo video coming soon.
+> Run `claude-team` to see the premium startup experience.
 
 ---
 
@@ -92,6 +94,10 @@ Once the summary appears, switch to the Manager pane (`0.0`) and start giving it
 | `claude-team init` | Register current directory as a project |
 | `claude-team list` | Show all projects with running/stopped status |
 | `claude-team stop` | Stop the team for the current project |
+| `claude-team update` | Pull latest changes and reinstall |
+| `claude-team doctor` | Check installation health and prerequisites |
+| `claude-team remove` | Unregister a project by name or current directory |
+| `claude-team version` | Show version and installation info |
 | `claude-team 4x3` | Launch with a custom grid layout |
 | `claude-team --help` | Show all options |
 
@@ -169,6 +175,52 @@ Once the summary appears, switch to the Manager pane (`0.0`) and start giving it
 
 ---
 
+## Configuration
+
+### Session Manifest
+
+Each session creates a manifest at `/tmp/claude-team/<project>/session.env` with session metadata. All agents and slash commands read from this file to stay in sync.
+
+| Variable | Description |
+|----------|-------------|
+| `PROJECT_DIR` | Absolute path to the project directory |
+| `SESSION_NAME` | tmux session name |
+| `WORKER_PANES` | Space-separated list of worker pane indices |
+| `WATCHDOG_PANE` | Pane index of the Watchdog |
+| `GRID` | Grid specification (e.g. `6x2`) |
+| `WORKER_COUNT` | Number of worker panes |
+
+### Runtime Directory Structure
+
+All runtime data lives under `/tmp/claude-team/<project>/`:
+
+```
+/tmp/claude-team/<project>/
+├── session.env        # Session manifest
+├── messages/          # Inter-pane messages
+├── broadcasts/        # Broadcast messages
+├── status/            # Per-pane status files (WORKING/IDLE)
+├── research/          # Research task markers
+└── reports/           # Research reports
+```
+
+### Project Registry
+
+Registered projects are stored in `~/.claude/claude-team/projects` as `name:path` entries (one per line). This file is managed by `claude-team init` and `claude-team remove`.
+
+### Status Hooks
+
+The repo includes `.claude/hooks/status-hook.sh` and `.claude/settings.local.json` which enable automatic WORKING/IDLE status tracking. The hook fires on `UserPromptSubmit` (marks the pane as WORKING) and `Stop` (marks it as IDLE), writing status files to the runtime directory. This powers `/tmux-monitor` and `/tmux-team` real-time worker state display.
+
+To use status hooks in your own project, copy the hook files from the repo:
+
+```bash
+cp -r /path/to/claude-code-tmux-team/.claude/hooks/ your-project/.claude/hooks/
+cp /path/to/claude-code-tmux-team/.claude/settings.local.json your-project/.claude/settings.local.json
+```
+
+---
+
 ## Grid Configurations
 
 The grid argument to `claude-team` is a `COLSxROWS` specification. Two panes are always reserved (Manager + Watchdog):
@@ -198,7 +250,12 @@ Once installed, these commands are available in any Claude Code instance:
 | `/tmux-broadcast` | Broadcast a message to all panes |
 | `/tmux-inbox` | Check incoming messages |
 | `/tmux-status` | Set or view pane statuses |
+| `/tmux-stop-all` | Stop all workers gracefully |
 | `/tmux-restart-workers` | Restart all workers (keeps Manager alive) |
+| `/tmux-reinstall` | Reinstall from the repo without leaving Claude Code |
+| `/tmux-manager-prompt` | Load the Manager system prompt |
+| `/tmux-runner-prompt` | Load the Runner/Worker system prompt |
+| `/tmux-watchdog-compact` | Load the compact Watchdog prompt |
 
 </details>
 
@@ -208,26 +265,27 @@ Once installed, these commands are available in any Claude Code instance:
 ```
 claude-code-tmux-team/
 ├── install.sh                   # Installer
-├── web-install.sh               # Self-contained web installer (curl | bash)
+├── web-install.sh               # Web installer (curl | bash)
 ├── agents/
-│   ├── tmux-manager.md          # Manager agent definition → ~/.claude/agents/
-│   └── tmux-watchdog.md         # Watchdog agent definition → ~/.claude/agents/
-├── skills/                      # User-level slash commands → ~/.claude/skills/
-│   ├── tmux-dispatch.md
-│   ├── tmux-delegate.md
-│   ├── tmux-monitor.md
-│   ├── tmux-restart-workers.md
-│   ├── tmux-manager-prompt.md
-│   ├── tmux-runner-prompt.md
-│   ├── tmux-team.md
-│   ├── tmux-send.md
+│   ├── tmux-manager.md          # Manager agent → ~/.claude/agents/
+│   └── tmux-watchdog.md         # Watchdog agent → ~/.claude/agents/
+├── commands/                    # Slash commands → ~/.claude/commands/
 │   ├── tmux-broadcast.md
+│   ├── tmux-delegate.md
+│   ├── tmux-dispatch.md
 │   ├── tmux-inbox.md
-│   └── tmux-status.md
-├── commands/                    # Project-level commands → .claude/commands/
-│   └── (same tmux-*.md files)
+│   ├── tmux-manager-prompt.md
+│   ├── tmux-monitor.md
+│   ├── tmux-reinstall.md
+│   ├── tmux-restart-workers.md
+│   ├── tmux-runner-prompt.md
+│   ├── tmux-send.md
+│   ├── tmux-status.md
+│   ├── tmux-stop-all.md
+│   ├── tmux-team.md
+│   └── tmux-watchdog-compact.md
 └── shell/
-    └── claude-team.sh           # Smart launcher script → ~/.local/bin/claude-team
+    └── claude-team.sh           # CLI launcher → ~/.local/bin/claude-team
 ```
 
 </details>
@@ -235,10 +293,9 @@ claude-code-tmux-team/
 <details>
 <summary><strong>Environment Variables</strong></summary>
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CLAUDE_TEAM_DIR` | `$PWD` | Working directory for the session |
-| `CLAUDE_TEAM_NAME` | `claude-team` | tmux session name |
+| Variable | Description |
+|----------|-------------|
+| `CLAUDE_TEAM_RUNTIME` | Path to the session runtime directory (set as tmux environment variable). Contains `session.env` manifest, messages, broadcasts, and status files. |
 
 </details>
 
@@ -276,6 +333,7 @@ cp -r /path/to/claude-code-tmux-team/commands/ .claude/commands/
 ## Requirements
 
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) installed and authenticated
+- [Node.js](https://nodejs.org/) v18+ (required by Claude Code)
 - [tmux](https://github.com/tmux/tmux) (any recent version)
 - macOS or Linux
 - A terminal with a large window (the grid needs room)
@@ -287,6 +345,70 @@ cp -r /path/to/claude-code-tmux-team/commands/ .claude/commands/
 Contributions are welcome! Open an issue or submit a PR.
 
 This project is in active development — if you find bugs, have ideas for new slash commands, or want to improve the orchestration logic, jump in.
+
+---
+
+## Troubleshooting
+
+<details>
+<summary><strong>Workers show "Not logged in"</strong></summary>
+
+Run `claude` manually in a regular terminal to authenticate first. The Watchdog will attempt auto-login but it's not always reliable.
+
+</details>
+
+<details>
+<summary><strong>Terminal too small for grid</strong></summary>
+
+Use a smaller grid like `claude-team 3x2` or maximize your terminal window. The default `6x2` grid needs approximately 200 columns to render properly.
+
+</details>
+
+<details>
+<summary><strong><code>claude-team update</code> fails after web install</strong></summary>
+
+The web installer's temporary directory was deleted after install. Fix: clone the repo manually, then run `./install.sh` to update the stored repo path:
+
+```bash
+git clone https://github.com/frikk-gyldendal/claude-code-tmux-team.git
+cd claude-code-tmux-team && ./install.sh
+```
+
+</details>
+
+<details>
+<summary><strong>Workers get stuck</strong></summary>
+
+The Manager can use `/tmux-restart-workers` to kill and restart all workers without restarting itself. This is useful when workers become unresponsive or are in a bad state.
+
+</details>
+
+<details>
+<summary><strong>macOS notifications not working</strong></summary>
+
+Check System Preferences > Notifications and ensure your terminal app is allowed to send notifications. On Linux, notifications are not supported (the notification system uses macOS-only `osascript`).
+
+</details>
+
+<details>
+<summary><strong><code>claude-team</code> command not found</strong></summary>
+
+Add `~/.local/bin` to your PATH by adding this line to your shell config (`~/.zshrc` or `~/.bashrc`):
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Then restart your shell or run `source ~/.zshrc`.
+
+</details>
+
+<details>
+<summary><strong><code>claude-team doctor</code> reports issues</strong></summary>
+
+Run `claude-team doctor` and follow the suggestions it provides. It checks tmux, Claude CLI, PATH configuration, agents, commands, and repo path. Most issues can be fixed by re-running `./install.sh`.
+
+</details>
 
 ---
 

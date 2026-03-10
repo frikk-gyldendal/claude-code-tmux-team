@@ -199,6 +199,14 @@ Free tier gives you 12 months of t3.micro at no cost.
 - Set `ANTHROPIC_API_KEY` in your shell profile or use `claude auth` for session-based auth
 - Use SSH key authentication — disable password auth in `sshd_config` for production servers
 
+### Next Steps
+
+Once the team is running, follow the [Quick Start](../README.md#quick-start) in the main README for usage instructions — giving the Manager tasks, monitoring workers, and using slash commands.
+
+### Platform Notes
+
+- **macOS notifications are not available on Linux.** The status hook sends desktop notifications via `osascript` on macOS when the Manager completes a task. On Linux, these notifications are silently skipped — all other functionality works identically.
+
 ### Troubleshooting (Linux)
 
 | Issue | Fix |
