@@ -65,6 +65,9 @@ tmux capture-pane -t "$SESSION_NAME:0.4" -p -S -3
 
 ### Send a task to a worker
 ```bash
+# ALWAYS exit copy-mode first (prevents silent task loss if pane was scrolled)
+tmux copy-mode -q -t "$SESSION_NAME:0.4" 2>/dev/null
+
 # Short task (< ~200 chars, no special chars)
 tmux send-keys -t "$SESSION_NAME:0.4" "Your task here" Enter
 
@@ -75,6 +78,7 @@ cat > "$TASKFILE" << 'TASK'
 Detailed multi-line task description here.
 Include file paths, acceptance criteria, and constraints.
 TASK
+tmux copy-mode -q -t "$SESSION_NAME:0.4" 2>/dev/null
 tmux load-buffer "$TASKFILE"
 tmux paste-buffer -t "$SESSION_NAME:0.4"
 sleep 0.5
@@ -90,8 +94,11 @@ After dispatching, wait 5s then check the worker started:
 sleep 5
 tmux capture-pane -t "$SESSION_NAME:0.4" -p -S -5
 ```
-If the pasted text is visible but the worker hasn't started processing, send Enter again:
+If the pasted text is visible but the worker hasn't started processing:
 ```bash
+# 1. Exit copy-mode if active (common cause of silent task loss)
+tmux copy-mode -q -t "$SESSION_NAME:0.4" 2>/dev/null
+# 2. Re-send Enter
 tmux send-keys -t "$SESSION_NAME:0.4" Enter
 ```
 

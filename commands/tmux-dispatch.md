@@ -30,7 +30,7 @@ This gives you:
 
 **ALWAYS use this exact pattern.** Never use `send-keys "" Enter` — it is broken.
 
-Every Bash call must start by reading the manifest, then follow all 10 steps for the target pane `0.X`:
+Every Bash call must start by reading the manifest, then follow all 11 steps for the target pane `0.X`:
 
 ```bash
 # (reads SESSION_NAME, PROJECT_NAME, PROJECT_DIR from manifest)
@@ -71,15 +71,18 @@ Your detailed task prompt here.
 Multi-line is fine.
 TASK
 
-# 8. Load into tmux buffer and paste into target pane
+# 8. Exit copy-mode if active (prevents silent task loss)
+tmux copy-mode -q -t "${SESSION_NAME}:0.X" 2>/dev/null
+
+# 9. Load into tmux buffer and paste into target pane
 tmux load-buffer "$TASKFILE"
 tmux paste-buffer -t "${SESSION_NAME}:0.X"
 
-# 9. CRITICAL: sleep then bare Enter — this is what actually submits
+# 10. CRITICAL: sleep then bare Enter — this is what actually submits
 sleep 0.5
 tmux send-keys -t "${SESSION_NAME}:0.X" Enter
 
-# 10. Cleanup
+# 11. Cleanup
 rm "$TASKFILE"
 ```
 
@@ -137,6 +140,8 @@ Use the same dispatch sequence above (steps 1–5 are mandatory — every task g
 ### Troubleshooting
 
 If a task doesn't start after dispatch:
-1. Check if the text was pasted: `tmux capture-pane -t "${SESSION_NAME}:0.X" -p -S -10`
-2. If text is there but not submitted: `tmux send-keys -t "${SESSION_NAME}:0.X" Enter`
-3. If text is garbled: the pane might have been busy. Wait for idle, then retry.
+1. Check if the pane is in copy-mode: `tmux display-message -t "${SESSION_NAME}:0.X" -p '#{pane_mode}'`
+2. If in copy-mode, exit it: `tmux copy-mode -q -t "${SESSION_NAME}:0.X" 2>/dev/null`
+3. Check if the text was pasted: `tmux capture-pane -t "${SESSION_NAME}:0.X" -p -S -10`
+4. If text is there but not submitted: `tmux send-keys -t "${SESSION_NAME}:0.X" Enter`
+5. If text is garbled: the pane might have been busy. Wait for idle, then retry.

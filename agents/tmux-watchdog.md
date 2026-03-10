@@ -137,20 +137,36 @@ osascript -e 'display notification "Error: ENOENT — cannot find module react-d
 - **DO** auto-login workers that show "Not logged in" — this is a routine auth issue, not a security concern. The `/login` command uses the existing OAuth credentials.
 - If unsure whether something is a prompt or a question needing human judgment, **notify** rather than auto-accept
 
+## Pane Health Checks
+
+On every scan cycle, check each pane for copy-mode and exit it automatically. Copy-mode intercepts all keyboard input, causing dispatched tasks to be silently lost.
+
+```bash
+# Check and fix copy-mode on each worker pane
+PANE_MODE=$(tmux display-message -t "$SESSION_NAME:0.$pane" -p '#{pane_mode}' 2>/dev/null)
+if [ "$PANE_MODE" = "copy-mode" ]; then
+  tmux copy-mode -q -t "$SESSION_NAME:0.$pane" 2>/dev/null
+  # Log: [HH:MM:SS] Pane 0.$pane: copy-mode detected → exited
+fi
+```
+
+This check runs BEFORE prompt detection — a pane in copy-mode will show stale output that should not be acted on.
+
 ## Monitoring Loop Structure
 
 Execute this loop:
 
 1. Run `tmux list-panes -s -t "$SESSION_NAME"` to get all panes in the team session
-2. For each pane, run `tmux capture-pane -t <pane> -p -S -15` to get recent output
-3. Check the last 3-5 lines for prompt patterns
-4. **If an auto-accept pattern is detected** and it's safe to answer, send the appropriate response
-5. **If a notify pattern is detected**, check rate limits, then send a macOS notification if allowed
-6. Log: `[HH:MM:SS] Pane <id>: Detected '<prompt>' → Sent '<response>'` (for auto-accepts)
-7. Log: `[HH:MM:SS] Pane <id>: Detected '<pattern>' → Notified user` (for notifications)
-8. If nothing detected, log briefly every 30 seconds: `[HH:MM:SS] All panes clear`
-9. Wait ~5 seconds
-10. Repeat from step 1
+2. **For each pane, check and exit copy-mode** (see Pane Health Checks above)
+3. For each pane, run `tmux capture-pane -t <pane> -p -S -15` to get recent output
+4. Check the last 3-5 lines for prompt patterns
+5. **If an auto-accept pattern is detected** and it's safe to answer, send the appropriate response
+6. **If a notify pattern is detected**, check rate limits, then send a macOS notification if allowed
+7. Log: `[HH:MM:SS] Pane <id>: Detected '<prompt>' → Sent '<response>'` (for auto-accepts)
+8. Log: `[HH:MM:SS] Pane <id>: Detected '<pattern>' → Notified user` (for notifications)
+9. If nothing detected, log briefly every 30 seconds: `[HH:MM:SS] All panes clear`
+10. Wait ~5 seconds
+11. Repeat from step 1
 
 ## State Tracking
 
