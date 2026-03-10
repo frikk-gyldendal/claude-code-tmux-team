@@ -4,19 +4,8 @@
 
 set -euo pipefail
 
-HOOK_DIR="$(dirname "$0")"
-if [ -f "$HOOK_DIR/common.sh" ]; then
-  source "$HOOK_DIR/common.sh"
-  init_hook
-else
-  INPUT=$(cat)
-  [ -z "${TMUX_PANE:-}" ] && exit 0
-  tmux display-message -t "${TMUX_PANE}" -p '' >/dev/null 2>&1 || exit 0
-  RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-) || exit 0
-  [ -z "$RUNTIME_DIR" ] && exit 0
-  PANE=$(tmux display-message -t "${TMUX_PANE}" -p '#{session_name}:#{window_index}.#{pane_index}') || exit 0
-  PANE_SAFE=${PANE//[:.]/_}
-fi
+source "$(dirname "$0")/common.sh"
+init_hook
 
 # Read current task from status file
 STATUS_FILE="${RUNTIME_DIR}/status/${PANE_SAFE}.status"

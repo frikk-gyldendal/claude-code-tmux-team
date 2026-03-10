@@ -20,17 +20,8 @@ else
   COUNTDOWN="${REMAINING}s"
 fi
 
-# --- Worker counts ---
-WORKING=0
-IDLE=0
-for f in "$RUNTIME_DIR/status/"*.status; do
-  [ -f "$f" ] || continue
-  if grep -q 'STATUS: WORKING' "$f" 2>/dev/null; then
-    WORKING=$((WORKING + 1))
-  elif grep -q 'STATUS: IDLE' "$f" 2>/dev/null; then
-    IDLE=$((IDLE + 1))
-  fi
-done
+# --- Worker counts (single awk pass instead of grep-per-file) ---
+read -r WORKING IDLE <<< "$(awk '/STATUS: WORKING/{w++} /STATUS: IDLE/{i++} END{print w+0, i+0}' "$RUNTIME_DIR/status/"*.status 2>/dev/null || echo "0 0")"
 
 if [ "$WORKING" -gt 0 ]; then
   WORKERS="#[fg=cyan]${WORKING}W#[fg=default]/${IDLE}I"

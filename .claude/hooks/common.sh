@@ -10,7 +10,6 @@ init_hook() {
 
   # Bail silently if not in tmux
   [ -z "${TMUX_PANE:-}" ] && exit 0
-  tmux display-message -t "${TMUX_PANE}" -p '' >/dev/null 2>&1 || exit 0
 
   # Get runtime dir — bail if not set
   RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-) || exit 0
@@ -26,8 +25,8 @@ init_hook() {
   PANE_INDEX="${PANE##*.}"
   NOW=$(date -Iseconds)
 
-  # Ensure runtime dirs exist
-  mkdir -p "${RUNTIME_DIR}/status" "${RUNTIME_DIR}/research" "${RUNTIME_DIR}/reports" "${RUNTIME_DIR}/results"
+  # Ensure runtime dirs exist (skip if already created)
+  [ -d "${RUNTIME_DIR}/status" ] || mkdir -p "${RUNTIME_DIR}/status" "${RUNTIME_DIR}/research" "${RUNTIME_DIR}/reports" "${RUNTIME_DIR}/results"
 }
 
 parse_field() {

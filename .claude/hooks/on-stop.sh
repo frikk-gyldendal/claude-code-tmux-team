@@ -84,8 +84,10 @@ if is_worker; then
   # Extract pane title (task name) for context
   PANE_TITLE=$(tmux display-message -t "$SESSION_NAME:0.$PANE_INDEX" -p '#{pane_title}' 2>/dev/null) || PANE_TITLE=""
 
-  # JSON-encode the last 5 lines of output safely
-  LAST_OUTPUT=$(echo "$OUTPUT" | tail -5 | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null) || LAST_OUTPUT='""'
+  # JSON-encode the last 5 lines of output safely (prefer jq over python3 for speed)
+  LAST_OUTPUT=$(echo "$OUTPUT" | tail -5 | jq -Rs '.' 2>/dev/null) || \
+    LAST_OUTPUT=$(echo "$OUTPUT" | tail -5 | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null) || \
+    LAST_OUTPUT='""'
 
   # Write result file
   cat > "$RUNTIME_DIR/results/${PANE_SAFE_RESULT}.json" <<EOF
