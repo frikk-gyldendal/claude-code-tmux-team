@@ -6,17 +6,11 @@ claude-code-tmux-team is a CLI tool that creates a tmux-based multi-agent Claude
 
 ## Architecture
 
-Three agent roles coordinate via tmux and a file-based runtime directory:
+- **Manager (pane 0.0):** Orchestrator — plans and delegates, never writes code. Uses `--agent tmux-manager` (Opus).
+- **Watchdog (pane 0.{cols}):** Monitors workers, auto-accepts prompts. Uses `--agent tmux-watchdog` (Haiku).
+- **Workers (remaining panes):** Standard Claude Code instances (Opus) that execute tasks.
 
-- **Manager (pane 0.0):** Orchestrator that plans, delegates tasks to workers, and monitors progress. Never writes code itself. Uses `--agent tmux-manager` with Opus model.
-- **Watchdog (pane 0.{cols}):** Monitors all worker panes every 5 seconds, auto-accepts y/n prompts, sends macOS notifications on state changes. Uses `--agent tmux-watchdog` with Haiku model.
-- **Workers (remaining panes):** Standard Claude Code instances (Opus) that receive and execute tasks. Each gets a system prompt via `--append-system-prompt-file`.
-
-Communication channels:
-- Task dispatch: `tmux send-keys` / `tmux paste-buffer`
-- Progress monitoring: `tmux capture-pane`
-- Session config: `/tmp/claude-team/<project>/session.env`
-- Inter-pane messages, broadcasts, status: files under `/tmp/claude-team/<project>/`
+Communication is via tmux commands (`send-keys`, `capture-pane`) and runtime files under `/tmp/claude-team/<project>/`. See `docs/context-reference.md` for details.
 
 ## Key Directories
 

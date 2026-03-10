@@ -26,12 +26,14 @@ This gives you:
 
 **Always use `${SESSION_NAME}` in all tmux commands** — never hardcode "claude-team".
 
-### Reliable Dispatch Function
+### Reliable Dispatch Sequence
 
 **ALWAYS use this exact pattern.** Never use `send-keys "" Enter` — it is broken.
 
+Every Bash call must start by reading the manifest, then follow all 10 steps for the target pane `0.X`:
+
 ```bash
-# 0. Load session config
+# (reads SESSION_NAME, PROJECT_NAME, PROJECT_DIR from manifest)
 RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
 source "${RUNTIME_DIR}/session.env"
 
@@ -88,6 +90,7 @@ Each dispatch starts a fresh Claude session. The old session is exited first to 
 **Always check before dispatching.** A worker is idle when its last few lines show the `❯` or `>` prompt:
 
 ```bash
+# (uses SESSION_NAME, PROJECT_NAME, PROJECT_DIR from manifest)
 tmux capture-pane -t "${SESSION_NAME}:0.X" -p -S -3
 ```
 
@@ -100,6 +103,7 @@ If the worker is idle, it still has an old session. The dispatch handles exiting
 After dispatching, wait 5 seconds and verify the worker started processing:
 
 ```bash
+# (uses SESSION_NAME, PROJECT_NAME, PROJECT_DIR from manifest)
 sleep 5
 tmux capture-pane -t "${SESSION_NAME}:0.X" -p -S -5
 ```
@@ -112,83 +116,13 @@ tmux send-keys -t "${SESSION_NAME}:0.X" Enter
 
 ### Batch Dispatch (multiple workers)
 
-For independent tasks, dispatch to multiple workers in a single message. Use separate Bash calls per worker — do NOT chain them with `&&` since they are independent.
+For independent tasks, dispatch to multiple workers in a single message. Use **separate Bash calls per worker** — do NOT chain them with `&&` since they are independent.
 
-Each Bash call should contain the full dispatch sequence for one worker (exit, fresh start, `/rename`):
-
-```bash
-# Worker A — all in one Bash call
-RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
-source "${RUNTIME_DIR}/session.env"
-PANE_PID=$(tmux display-message -t "${SESSION_NAME}:0.2" -p '#{pane_pid}')
-CHILD_PID=$(pgrep -P "$PANE_PID" 2>/dev/null)
-[ -n "$CHILD_PID" ] && kill "$CHILD_PID" 2>/dev/null
-sleep 3
-tmux send-keys -t "${SESSION_NAME}:0.2" "claude --dangerously-skip-permissions --model opus" Enter
-sleep 8
-tmux send-keys -t "${SESSION_NAME}:0.2" "/rename task-a-name" Enter
-sleep 1
-mkdir -p "${RUNTIME_DIR}"
-TASKFILE=$(mktemp "${RUNTIME_DIR}/task_XXXXXX.txt")
-cat > "$TASKFILE" << TASK
-You are a worker on the Claude Team for project: ${PROJECT_NAME}
-Project directory: ${PROJECT_DIR}
-All file paths should be absolute.
-
-... task for worker A ...
-TASK
-tmux load-buffer "$TASKFILE"
-tmux paste-buffer -t "${SESSION_NAME}:0.2"
-sleep 0.5
-tmux send-keys -t "${SESSION_NAME}:0.2" Enter
-rm "$TASKFILE"
-```
-
-```bash
-# Worker B — separate Bash call, runs in parallel
-RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
-source "${RUNTIME_DIR}/session.env"
-PANE_PID=$(tmux display-message -t "${SESSION_NAME}:0.3" -p '#{pane_pid}')
-CHILD_PID=$(pgrep -P "$PANE_PID" 2>/dev/null)
-[ -n "$CHILD_PID" ] && kill "$CHILD_PID" 2>/dev/null
-sleep 3
-tmux send-keys -t "${SESSION_NAME}:0.3" "claude --dangerously-skip-permissions --model opus" Enter
-sleep 8
-tmux send-keys -t "${SESSION_NAME}:0.3" "/rename task-b-name" Enter
-sleep 1
-mkdir -p "${RUNTIME_DIR}"
-TASKFILE=$(mktemp "${RUNTIME_DIR}/task_XXXXXX.txt")
-cat > "$TASKFILE" << TASK
-You are a worker on the Claude Team for project: ${PROJECT_NAME}
-Project directory: ${PROJECT_DIR}
-All file paths should be absolute.
-
-... task for worker B ...
-TASK
-tmux load-buffer "$TASKFILE"
-tmux paste-buffer -t "${SESSION_NAME}:0.3"
-sleep 0.5
-tmux send-keys -t "${SESSION_NAME}:0.3" Enter
-rm "$TASKFILE"
-```
+Each Bash call contains the full dispatch sequence (steps 1–10) for one worker, with the appropriate pane index and task content. Repeat for each additional worker in parallel Bash calls — same pattern, different pane index and task content.
 
 ### Short tasks (< 200 chars, no special chars)
 
-Even short tasks need a fresh Claude session. Exit and restart before dispatching:
-
-```bash
-RUNTIME_DIR=$(tmux show-environment CLAUDE_TEAM_RUNTIME 2>/dev/null | cut -d= -f2-)
-source "${RUNTIME_DIR}/session.env"
-PANE_PID=$(tmux display-message -t "${SESSION_NAME}:0.X" -p '#{pane_pid}')
-CHILD_PID=$(pgrep -P "$PANE_PID" 2>/dev/null)
-[ -n "$CHILD_PID" ] && kill "$CHILD_PID" 2>/dev/null
-sleep 3
-tmux send-keys -t "${SESSION_NAME}:0.X" "claude --dangerously-skip-permissions --model opus" Enter
-sleep 8
-tmux send-keys -t "${SESSION_NAME}:0.X" "Your short task here" Enter
-```
-
-This ensures every task — even short ones — gets a clean context with no stale state.
+Use the same dispatch sequence above (steps 1–5 are mandatory — every task gets a fresh Claude context), but you can skip the tmpfile (steps 6–8, 10) and use `send-keys` directly after step 5.
 
 ### Rules
 
@@ -196,11 +130,9 @@ This ensures every task — even short ones — gets a clean context with no sta
 2. **Always `sleep 0.5`** between `paste-buffer` and `send-keys Enter`
 3. **Always check idle first** — don't interrupt a working pane
 4. **Always verify after dispatch** — confirm the worker started processing
-5. **Never touch the Watchdog pane** — its index is in the manifest as `WATCHDOG_PANE`
-6. **Worker pane indices are in the manifest** as `WORKER_PANES` — always read from manifest, never hardcode
-7. **Always include project context in every task prompt** — workers need to know the project name, directory, and that paths should be absolute
-8. **Read the manifest first** — discover runtime dir and source session.env before dispatching
-9. **Always exit the old session before dispatching** — every task gets a fresh Claude context
+5. **Always include project context in every task prompt** — workers need to know the project name, directory, and that paths should be absolute
+6. **Always exit the old session before dispatching** — every task gets a fresh Claude context
+7. See also: Manager agent definition rules (always active in your context)
 
 ### Troubleshooting
 

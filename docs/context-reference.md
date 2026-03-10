@@ -17,7 +17,7 @@ documents what IS, not what should be.
 Load Order (bottom = loaded first, top = loaded last / highest precedence)
 
   +----------------------------------------------------------+
-  | 10. CLAUDE.md           (NOT PRESENT — gap)              |
+  | 10. CLAUDE.md           (project root — loaded by all)   |
   +----------------------------------------------------------+
   |  9. Runtime State       (status files, messages, tasks)  |
   +----------------------------------------------------------+
@@ -50,7 +50,7 @@ Load Order (bottom = loaded first, top = loaded last / highest precedence)
 | 7. CLI Launch Flags | `--agent`, `--model`, `--dangerously-skip-permissions` | Per-instance | Startup |
 | 8. tmux Integration | tmux session config, pane structure | All | Startup (session creation) |
 | 9. Runtime State | `/tmp/claude-team/<name>/` tree | All | Runtime (continuous) |
-| 10. CLAUDE.md | Not present | N/A | N/A |
+| 10. CLAUDE.md | `CLAUDE.md` in project root | All | Startup (project context) |
 
 
 ## Layer 1: Agent Definitions
@@ -192,7 +192,7 @@ format `session:window.pane` (e.g., `ct-myproject:0.4`).
 
 ## Layer 4: Skills/Commands
 
-All 15 skills are installed to `~/.claude/commands/` and invoked via `/skill-name`.
+All 13 skills are installed to `~/.claude/commands/` and invoked via `/skill-name`.
 
 | Skill | File | Primary Agent | Purpose |
 |-------|------|---------------|---------|
@@ -209,8 +209,6 @@ All 15 skills are installed to `~/.claude/commands/` and invoked via `/skill-nam
 | `/tmux-restart-workers` | `tmux-restart-workers.md` | Manager | Restart all workers and Watchdog (not Manager) |
 | `/tmux-reinstall` | `tmux-reinstall.md` | Manager | Pull latest from git and re-run installer |
 | `/tmux-watchdog-compact` | `tmux-watchdog-compact.md` | Manager | Send `/compact` to Watchdog to reduce token usage |
-| `/tmux-manager-prompt` | `tmux-manager-prompt.md` | Manager | Manager system prompt reference |
-| `/tmux-runner-prompt` | `tmux-runner-prompt.md` | Watchdog | Watchdog system prompt reference |
 
 ### How Skills Load
 
@@ -225,8 +223,7 @@ content composes on top of it as additional user-turn instructions.
   `/tmux-monitor`, `/tmux-status`, `/tmux-broadcast`, `/tmux-send`,
   `/tmux-team`, `/tmux-stop-all`, `/tmux-restart-workers`, `/tmux-reinstall`,
   `/tmux-watchdog-compact`
-- **Watchdog** uses: `/tmux-runner-prompt` (reference only; the Watchdog
-  operates from its agent definition, not skills)
+- **Watchdog** uses: none (operates from its agent definition, not skills)
 - **Workers** use: `/tmux-inbox`, `/tmux-status` (when explicitly told to)
 
 
@@ -488,23 +485,16 @@ These files persist in the runtime directory for the session's lifetime.
 
 ## Layer 10: CLAUDE.md
 
-**Status: Not present in this project.**
+**Status: Present.** `CLAUDE.md` exists in the project root and is loaded by
+Claude Code into every instance's context (Manager, Watchdog, and all Workers).
 
-A `CLAUDE.md` file in the project root would be automatically loaded by Claude
-Code into every instance's context. If added, it would:
-
-- Apply to Manager, Watchdog, and all Workers equally
-- Load at startup as part of project context
-- Take precedence over settings but not over CLI flags
-- Be the right place for project-specific coding conventions, architecture
-  notes, and repo-wide instructions
-
-Recommended contents if created:
-- Project architecture overview
-- Coding conventions and patterns
-- File organization guide
-- Build/test/lint commands
-- Any instructions that all agents (Manager + Workers) should follow
+**Contents:**
+- Project overview and architecture (three agent roles, communication channels)
+- Key directories (`agents/`, `commands/`, `.claude/hooks/`, `shell/`, `docs/`)
+- Development conventions (frontmatter format, hook exit codes, shell conventions)
+- Testing guidance (what to restart when changing agents, hooks, commands, launcher)
+- Important file reference (`claude-team.sh`, `status-hook.sh`, `install.sh`)
+- Link to this context reference document
 
 
 ## Complete Context Stacks
@@ -536,7 +526,7 @@ Recommended contents if created:
  7. CLI: --dangerously-skip-permissions --model haiku --agent tmux-watchdog
  8. tmux env: CLAUDE_TEAM_RUNTIME -> session.env     (session context)
  9. Runtime: reads pane output via capture-pane       (live state)
-10. Skills: /tmux-runner-prompt (reference only)
+10. Skills: none (operates from agent definition)
 ```
 
 ### Worker Context (load order, for comparison)

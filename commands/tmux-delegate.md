@@ -50,9 +50,6 @@ You are delegating a task to another Claude Code instance running in a TMUX pane
    tmux send-keys -t "$TARGET_PANE" Enter
    rm "$TASKFILE"
    ```
-
-   **CRITICAL**: Never use `send-keys "" Enter` (empty string before Enter) — it swallows the keystroke. Always use bare `Enter` after a `sleep 0.5`.
-
 5. Confirm to the user that the task was sent and which pane received it.
 
 ### Notes

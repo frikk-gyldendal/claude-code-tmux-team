@@ -210,47 +210,7 @@ For comprehensive documentation of the system internals:
 
 ## Configuration
 
-### Session Manifest
-
-Each session creates a manifest at `/tmp/claude-team/<project>/session.env` with session metadata. All agents and slash commands read from this file to stay in sync.
-
-| Variable | Description |
-|----------|-------------|
-| `PROJECT_DIR` | Absolute path to the project directory |
-| `SESSION_NAME` | tmux session name |
-| `WORKER_PANES` | Space-separated list of worker pane indices |
-| `WATCHDOG_PANE` | Pane index of the Watchdog |
-| `GRID` | Grid specification (e.g. `6x2`) |
-| `WORKER_COUNT` | Number of worker panes |
-
-### Runtime Directory Structure
-
-All runtime data lives under `/tmp/claude-team/<project>/`:
-
-```
-/tmp/claude-team/<project>/
-├── session.env        # Session manifest
-├── messages/          # Inter-pane messages
-├── broadcasts/        # Broadcast messages
-├── status/            # Per-pane status files (WORKING/IDLE)
-├── research/          # Research task markers
-└── reports/           # Research reports
-```
-
-### Project Registry
-
-Registered projects are stored in `~/.claude/claude-team/projects` as `name:path` entries (one per line). This file is managed by `ct init` and `ct remove`.
-
-### Status Hooks
-
-The repo includes `.claude/hooks/status-hook.sh` and `.claude/settings.local.json` which enable automatic WORKING/IDLE status tracking. The hook fires on `UserPromptSubmit` (marks the pane as WORKING) and `Stop` (marks it as IDLE), writing status files to the runtime directory. This powers `/tmux-monitor` and `/tmux-team` real-time worker state display.
-
-To use status hooks in your own project, copy the hook files from the repo:
-
-```bash
-cp -r /path/to/claude-code-tmux-team/.claude/hooks/ your-project/.claude/hooks/
-cp /path/to/claude-code-tmux-team/.claude/settings.local.json your-project/.claude/settings.local.json
-```
+The session manifest (`session.env`) and runtime directory are created automatically by `ct init`. For detailed documentation of the manifest variables, runtime directory structure, status hooks, and all system internals, see the [Context Reference](docs/context-reference.md).
 
 ---
 
@@ -283,11 +243,10 @@ Once installed, these commands are available in any Claude Code instance:
 | `/tmux-broadcast` | Broadcast a message to all panes |
 | `/tmux-inbox` | Check incoming messages |
 | `/tmux-status` | Set or view pane statuses |
+| `/tmux-research` | Dispatch research task with guaranteed report-back |
 | `/tmux-stop-all` | Stop all workers gracefully |
 | `/tmux-restart-workers` | Restart all workers (keeps Manager alive) |
 | `/tmux-reinstall` | Reinstall from the repo without leaving Claude Code |
-| `/tmux-manager-prompt` | Load the Manager system prompt |
-| `/tmux-runner-prompt` | Load the Runner/Worker system prompt |
 | `/tmux-watchdog-compact` | Load the compact Watchdog prompt |
 
 </details>
@@ -310,11 +269,9 @@ claude-code-tmux-team/
 │   ├── tmux-delegate.md
 │   ├── tmux-dispatch.md
 │   ├── tmux-inbox.md
-│   ├── tmux-manager-prompt.md
 │   ├── tmux-monitor.md
 │   ├── tmux-reinstall.md
 │   ├── tmux-restart-workers.md
-│   ├── tmux-runner-prompt.md
 │   ├── tmux-send.md
 │   ├── tmux-status.md
 │   ├── tmux-stop-all.md

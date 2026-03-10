@@ -279,7 +279,3 @@ rm -f "${RUNTIME_DIR}/reports/"*.report
 2. **Always clear any old report file before dispatching** — stale reports would bypass enforcement
 3. **The `PANE_SAFE` variable must match exactly** — full pane reference with `:` and `.` replaced by `_`
 4. **Include the report path in the task prompt** — the worker needs to know where to write
-5. **Never dispatch to the Watchdog pane**
-6. **Always check idle first** — don't interrupt a working pane
-7. **Always verify after dispatch** — confirm the worker started processing
-8. **Always exit the old session before dispatching** — fresh context every time
