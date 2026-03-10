@@ -173,6 +173,21 @@ Track the last 5 lines of output for each worker pane across scan cycles. If a w
 #   Log: [HH:MM:SS] Pane 0.$pane: STUCK — same output for 3+ scans
 #   Notify: "Worker N appears stuck — same output for 15+ seconds"
 #   Only notify ONCE per stuck episode (reset counter when output changes)
+#
+#   Write alert file (only if not already alerted for this episode):
+    mkdir -p "$RUNTIME_DIR/status/alerts"
+    cat > "$RUNTIME_DIR/status/alerts/pane_${PANE_INDEX}.alert" << EOF
+{
+  "pane": "0.$PANE_INDEX",
+  "type": "stuck",
+  "detected_at": $(date +%s),
+  "scans_stuck": $STUCK_COUNTER,
+  "message": "Worker 0.$PANE_INDEX appears stuck — same output for ${STUCK_COUNTER}+ scans"
+}
+EOF
+#
+# When the worker resumes (output changes), clear the alert:
+#   rm -f "$RUNTIME_DIR/status/alerts/pane_${PANE_INDEX}.alert" 2>/dev/null
 ```
 
 **Important**: Only flag a pane as stuck if it is in a WORKING state (not idle at the `❯` prompt). An idle worker showing the same prompt is normal.
@@ -188,6 +203,21 @@ if echo "$PANE_CMD" | grep -qE '^(bash|zsh|sh|fish)$'; then
   # Log: [HH:MM:SS] Pane 0.$pane: CRASHED — showing shell prompt, Claude Code not running
   # Notify: "Worker N crashed — Claude Code exited, showing shell prompt"
   # Only notify ONCE per crash (track crashed state per pane)
+  #
+  # Write alert file (only if not already alerted for this crash):
+  mkdir -p "$RUNTIME_DIR/status/alerts"
+  cat > "$RUNTIME_DIR/status/alerts/pane_${PANE_INDEX}.alert" << EOF
+{
+  "pane": "0.$PANE_INDEX",
+  "type": "crashed",
+  "detected_at": $(date +%s),
+  "pane_cmd": "$PANE_CMD",
+  "message": "Worker 0.$PANE_INDEX crashed — Claude Code exited, showing $PANE_CMD"
+}
+EOF
+  #
+  # When Claude Code restarts in the pane (pane_current_command is no longer a shell), clear the alert:
+  #   rm -f "$RUNTIME_DIR/status/alerts/pane_${PANE_INDEX}.alert" 2>/dev/null
 fi
 ```
 
@@ -208,18 +238,19 @@ Execute this loop (start it IMMEDIATELY — see "Immediate Self-Start" above):
 
 1. Run `tmux list-panes -s -t "$SESSION_NAME"` to get all panes in the team session
 2. **For each pane, check and exit copy-mode** (see Health Monitoring §1 above)
-3. **For each pane, check for crashed pane** (see Health Monitoring §3 above)
+3. **For each pane, check for crashed pane** (see Health Monitoring §3 above) — write alert file if crashed, clear alert if recovered
 4. For each pane, run `tmux capture-pane -t <pane> -p -S -15` to get recent output
-5. **For each pane, check for stuck worker** (see Health Monitoring §2 above)
-6. Check the last 3-5 lines for prompt patterns
-7. **If an auto-accept pattern is detected** and it's safe to answer, send the appropriate response
-8. **If a notify pattern is detected**, check rate limits, then send a macOS notification if allowed
-9. Log: `[HH:MM:SS] Pane <id>: Detected '<prompt>' → Sent '<response>'` (for auto-accepts)
-10. Log: `[HH:MM:SS] Pane <id>: Detected '<pattern>' → Notified user` (for notifications)
-11. If nothing detected, log briefly every 30 seconds: `[HH:MM:SS] All panes clear`
-12. **Write heartbeat** to `$RUNTIME_DIR/status/watchdog.heartbeat` (see Health Monitoring §4)
-13. Wait ~5 seconds
-14. Repeat from step 1
+5. **For each pane, check for stuck worker** (see Health Monitoring §2 above) — write alert file if stuck, clear alert if output changes
+6. **Clear alerts for recovered panes**: if a pane was previously stuck or crashed but is now healthy (output changed or Claude Code is running again), remove its alert file: `rm -f "$RUNTIME_DIR/status/alerts/pane_${PANE_INDEX}.alert" 2>/dev/null`
+7. Check the last 3-5 lines for prompt patterns
+8. **If an auto-accept pattern is detected** and it's safe to answer, send the appropriate response
+9. **If a notify pattern is detected**, check rate limits, then send a macOS notification if allowed
+10. Log: `[HH:MM:SS] Pane <id>: Detected '<prompt>' → Sent '<response>'` (for auto-accepts)
+11. Log: `[HH:MM:SS] Pane <id>: Detected '<pattern>' → Notified user` (for notifications)
+12. If nothing detected, log briefly every 30 seconds: `[HH:MM:SS] All panes clear`
+13. **Write heartbeat** to `$RUNTIME_DIR/status/watchdog.heartbeat` (see Health Monitoring §4)
+14. Wait ~5 seconds
+15. Repeat from step 1
 
 ## State Tracking
 
@@ -233,6 +264,7 @@ Maintain a mental record of:
 - **Per-pane output hash** from the last 3 scans (for stuck worker detection). Reset when output changes.
 - **Per-pane crashed flag** (for crashed pane detection). Reset when Claude Code is running again.
 - **Per-pane stuck notification flag** — only notify once per stuck episode
+- **Per-pane active alert flag** — track which panes have a current alert file written (to avoid re-writing the same alert every cycle). Clear the flag when the alert file is removed on recovery.
 
 ## Reporting
 

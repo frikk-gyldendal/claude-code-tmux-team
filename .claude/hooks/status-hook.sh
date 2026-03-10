@@ -56,6 +56,10 @@ TASK: $TASK
 EOF
     ;;
   Stop)
+    # Extract pane identity components for use throughout Stop handler
+    SESSION_NAME="${PANE%%:*}"
+    PANE_INDEX="${PANE##*.}"
+
     cat > "$STATUS_FILE" <<EOF
 PANE: $PANE
 UPDATED: $NOW
@@ -104,7 +108,6 @@ EOF
     # Read WATCHDOG_PANE from the session manifest to identify ourselves.
     if [ -f "${RUNTIME_DIR}/session.env" ]; then
       WATCHDOG_PANE_INDEX=$(grep '^WATCHDOG_PANE=' "${RUNTIME_DIR}/session.env" | cut -d= -f2)
-      PANE_INDEX="${PANE##*.}"
       if [ "$PANE_INDEX" = "$WATCHDOG_PANE_INDEX" ]; then
         # If stop_hook_active is true, this is already a retry — allow some breathing room
         if [ "$STOP_HOOK_ACTIVE" = "true" ]; then
@@ -113,6 +116,49 @@ EOF
         echo "You are the Watchdog. Do NOT stop. Continue your monitoring loop — check all worker panes again now." >&2
         exit 2
       fi
+    fi
+
+    # --- Result capture for worker panes ---
+    # Capture structured result data so the Manager can read JSON instead of scraping pane output.
+    # Skip Manager (pane 0.0) and Watchdog.
+    WINDOW_AND_PANE_FOR_RESULT="${PANE#*:}"
+    IS_WORKER=true
+    if [ "$WINDOW_AND_PANE_FOR_RESULT" = "0.0" ]; then
+      IS_WORKER=false
+    elif [ -f "${RUNTIME_DIR}/session.env" ] && [ "${PANE_INDEX}" = "$(grep '^WATCHDOG_PANE=' "${RUNTIME_DIR}/session.env" 2>/dev/null | cut -d= -f2)" ]; then
+      IS_WORKER=false
+    fi
+
+    if [ "$IS_WORKER" = true ]; then
+      PANE_SAFE_RESULT="pane_${PANE_INDEX}"
+      mkdir -p "$RUNTIME_DIR/results"
+
+      # Capture last 20 lines of pane output
+      OUTPUT=$(tmux capture-pane -t "$SESSION_NAME:0.$PANE_INDEX" -p -S -20 2>/dev/null) || OUTPUT=""
+
+      # Determine status based on output
+      if echo "$OUTPUT" | grep -qiE '(error|failed|✗|exception)'; then
+        RESULT_STATUS="error"
+      else
+        RESULT_STATUS="done"
+      fi
+
+      # Extract pane title (task name) for context
+      PANE_TITLE=$(tmux display-message -t "$SESSION_NAME:0.$PANE_INDEX" -p '#{pane_title}' 2>/dev/null) || PANE_TITLE=""
+
+      # JSON-encode the last 5 lines of output safely
+      LAST_OUTPUT=$(echo "$OUTPUT" | tail -5 | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null) || LAST_OUTPUT='""'
+
+      # Write result file
+      cat > "$RUNTIME_DIR/results/${PANE_SAFE_RESULT}.json" <<EOF
+{
+  "pane": "0.$PANE_INDEX",
+  "status": "$RESULT_STATUS",
+  "title": "$PANE_TITLE",
+  "timestamp": $(date +%s),
+  "last_output": $LAST_OUTPUT
+}
+EOF
     fi
 
     # Send macOS notification — ONLY for the Manager pane (0.0)

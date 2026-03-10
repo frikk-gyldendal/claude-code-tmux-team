@@ -165,6 +165,45 @@ Use the same dispatch sequence above (steps 1–8 are mandatory — every task g
 8. **If verification fails, run the unstick sequence** before retrying dispatch
 9. See also: Manager agent definition rules (always active in your context)
 
+### File Conflict Prevention
+
+When dispatching multiple workers in parallel, prevent file conflicts:
+
+**1. Explicit file ownership in task prompts**
+Always tell each worker which files it owns. Example:
+```
+You own these files exclusively:
+- /path/to/project/src/components/Footer.tsx
+- /path/to/project/src/styles/footer.css
+
+Do NOT modify any other files. Use the Edit tool with targeted replacements — never use Write on files other workers may be editing.
+```
+
+**2. Section ownership for shared files**
+If multiple workers must edit the same file, assign non-overlapping sections:
+```
+You own the <footer> section of index.html (lines ~150-200).
+Do NOT modify <nav>, <header>, or any other section.
+Use Edit with targeted old_string/new_string replacements only.
+Never use the Write tool on this file.
+```
+
+**3. Sequential dispatch for same-file edits**
+If two workers must edit overlapping sections of the same file, dispatch them sequentially — wait for the first to finish before dispatching the second.
+
+**4. Lockfile mechanism (optional extra safety)**
+Workers can create a lockfile before editing shared files:
+```bash
+# Before editing
+LOCK="$RUNTIME_DIR/locks/$(echo "filename" | tr '/' '_').lock"
+mkdir -p "$RUNTIME_DIR/locks"
+touch "$LOCK"
+
+# After editing
+rm -f "$LOCK"
+```
+The Manager should check for active locks before dispatching a new worker to the same file. This is secondary to clear ownership — ownership in the prompt is the primary defense.
+
 ### Troubleshooting: Unstick a non-responsive worker
 
 If dispatch verification (step 15) reports failure, or a worker appears stuck/non-responsive, run this unstick sequence:

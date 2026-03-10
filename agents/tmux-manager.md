@@ -136,6 +136,30 @@ for i in $(echo "$WORKER_PANES" | tr ',' ' '); do
 done
 ```
 
+### Check worker results
+
+Workers write structured result files on completion at `$RUNTIME_DIR/results/pane_${PANE_INDEX}.json` containing:
+```json
+{"pane": "0.4", "status": "done"|"error", "title": "task-name", "timestamp": 1234567890, "last_output": "..."}
+```
+
+**Prefer reading result files over capture-pane scraping.** Result files are written by the status hook when a worker stops and contain structured status, title, and output summary.
+
+```bash
+# Check if a worker has a result file
+RESULT_FILE="$RUNTIME_DIR/results/pane_4.json"
+if [ -f "$RESULT_FILE" ]; then
+  cat "$RESULT_FILE"
+fi
+```
+
+```bash
+# Check all worker results at once
+for f in "$RUNTIME_DIR/results"/pane_*.json; do
+  [ -f "$f" ] && cat "$f" && echo ""
+done
+```
+
 ## Workflow
 
 When the user gives you a task:
@@ -172,8 +196,24 @@ When the user gives you a task:
 - Track assignments: which worker is doing what
 - **Never block.** After dispatching, immediately tell the user what you sent and move on. Don't sit and wait.
 
+### File ownership in parallel tasks
+
+When dispatching multiple workers that may touch the same files, enforce file ownership in the task prompt:
+- Explicitly state which files or sections each worker owns: "You own `<footer>` in index.html — do NOT modify `<nav>` or `<header>`"
+- Instruct workers to use `Edit` with targeted replacements, never `Write` for existing shared files
+- If two workers must edit the same file, dispatch them sequentially (not in parallel)
+- For safety, workers can create a lockfile before editing: `touch "$RUNTIME_DIR/locks/filename.lock"` and check for it before writing. But the primary defense is clear ownership in the task prompt.
+
 ### 4. Monitor
-- Periodically capture worker output to check progress (use `/tmux-monitor`)
+- Check worker progress every **10–15 seconds** (use `/tmux-monitor`). After dispatch, first check at 10s, then every 10–15s.
+- **Check result files first** (`$RUNTIME_DIR/results/pane_*.json`) — they give structured status without scraping. Fall back to capture-pane only if no result file exists yet.
+- **Check for Watchdog alerts** during each monitoring sweep — the Watchdog writes alerts for stuck or crashed workers:
+  ```bash
+  # Check for watchdog alerts
+  for f in "$RUNTIME_DIR/status/alerts"/*.alert; do
+    [ -f "$f" ] && cat "$f" && echo ""
+  done
+  ```
 - When a worker finishes, note its completion and check if the next wave can start
 - If a worker errors out, capture the error and decide: retry, reassign, or escalate to user
 - **While monitoring, stay responsive to new user requests** — you can dispatch new tasks to idle workers even while other tasks are in progress
