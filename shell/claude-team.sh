@@ -12,6 +12,7 @@ set -euo pipefail
 #   claude-team doctor       # Check installation health & prerequisites
 #   claude-team remove NAME  # Unregister a project from the registry
 #   claude-team uninstall    # Remove all Claude Team files
+#   claude-team test         # Run E2E integration test
 #   claude-team version      # Show version and install info
 #   claude-team 4x3          # Launch/reattach with specific grid
 #   claude-team --help       # Show usage
@@ -758,6 +759,313 @@ check_for_updates() {
   fi
 }
 
+# ── Headless Launch (no banner, no attach) ────────────────────────────
+# Simplified copy of launch_session() for automated/test use.
+# Starts the full team (session, grid, Manager, Watchdog, workers) but
+# does not print the ASCII banner, summary box, or attach to tmux.
+
+launch_session_headless() {
+  local name="$1"
+  local dir="$2"
+  local grid="${3:-6x2}"
+  local cols="${grid%x*}"
+  local rows="${grid#*x}"
+  local total=$(( cols * rows ))
+  local worker_count=$(( total - 2 ))
+  local watchdog_pane=$cols
+  local session="ct-${name}"
+  local runtime_dir="/tmp/claude-team/${name}"
+
+  cd "$dir"
+
+  # ── Build worker pane list ──
+  local worker_panes_csv=""
+  for (( i=1; i<total; i++ )); do
+    [[ $i -eq $watchdog_pane ]] && continue
+    [[ -n "$worker_panes_csv" ]] && worker_panes_csv+=","
+    worker_panes_csv+="$i"
+  done
+
+  # ── Create session ──
+  printf "  ${DIM}Creating session ${session}...${RESET}\n"
+  tmux kill-session -t "$session" 2>/dev/null || true
+  rm -rf "$runtime_dir"
+  mkdir -p "${runtime_dir}"/{messages,broadcasts,status}
+
+  cat > "${runtime_dir}/session.env" << MANIFEST
+PROJECT_DIR=$dir
+PROJECT_NAME=$name
+SESSION_NAME=$session
+GRID=$grid
+TOTAL_PANES=$total
+WORKER_COUNT=$worker_count
+WATCHDOG_PANE=$watchdog_pane
+WORKER_PANES=$worker_panes_csv
+RUNTIME_DIR=${runtime_dir}
+MANIFEST
+
+  cat > "${runtime_dir}/worker-system-prompt.md" << 'WORKER_PROMPT'
+# Claude Team Worker
+
+You are a **Worker** on the Claude Team, coordinated by a Manager in pane 0.0. You receive tasks via this chat and execute them independently.
+
+## Rules
+1. **Absolute paths only** — Always use absolute file paths. Never use relative paths.
+2. **Stay in scope** — Only make changes within the scope of your assigned task. Do not refactor, clean up, or "improve" code outside your task.
+3. **Concurrent awareness** — Other workers are editing other files in this codebase simultaneously. Avoid broad sweeping changes (global renames, config modifications, formatter runs) unless your task explicitly requires it.
+4. **When done, stop** — Complete your task and stop. Do not ask follow-up questions unless you are genuinely blocked. The Manager will check your output.
+5. **If blocked, describe and stop** — If you encounter an unrecoverable error, describe it clearly and stop.
+6. **No git commits** — Do not create git commits unless your task explicitly says to. The Manager coordinates commits.
+7. **No tmux interaction** — Do not try to communicate with other panes. Just do your work.
+WORKER_PROMPT
+
+  cat >> "${runtime_dir}/worker-system-prompt.md" << WORKER_CONTEXT
+
+## Project
+- **Name:** ${name}
+- **Root:** ${dir}
+- **Runtime directory:** ${runtime_dir}
+WORKER_CONTEXT
+
+  tmux new-session -d -s "$session" -c "$dir"
+  tmux set-environment -t "$session" CLAUDE_TEAM_RUNTIME "${runtime_dir}"
+
+  # ── Apply theme ──
+  printf "  ${DIM}Applying theme...${RESET}\n"
+  tmux set-option -t "$session" pane-border-status top
+  tmux set-option -t "$session" pane-border-format \
+    ' #{?pane_active,#[fg=cyan#,bold],#[fg=colour245]}#{pane_title} #[default]'
+  tmux set-option -t "$session" pane-border-style 'fg=colour238'
+  tmux set-option -t "$session" pane-active-border-style 'fg=cyan'
+  tmux set-option -t "$session" pane-border-lines heavy
+  tmux set-option -t "$session" status-position top
+  tmux set-option -t "$session" status-style 'bg=colour233,fg=colour248'
+  tmux set-option -t "$session" status-left-length 50
+  tmux set-option -t "$session" status-right-length 70
+  tmux set-option -t "$session" status-left \
+    "#[fg=colour233,bg=cyan,bold]  CLAUDE TEAM: ${name} #[fg=cyan,bg=colour236,nobold] #S #[fg=colour236,bg=colour233] "
+  tmux set-option -t "$session" status-right \
+    "#[fg=colour245] #{pane_title} #[fg=colour233,bg=colour240]  %H:%M #[fg=colour233,bg=colour245,bold] ${worker_count} workers "
+  tmux set-option -t "$session" status-interval 5
+  tmux set-option -t "$session" window-status-format '#[fg=colour245] #I #W '
+  tmux set-option -t "$session" window-status-current-format '#[fg=cyan,bold] #I #W '
+  tmux set-option -t "$session" message-style 'bg=colour233,fg=cyan'
+  tmux set-option -t "$session" set-titles on
+  tmux set-option -t "$session" set-titles-string "🤖 #{session_name} — #{pane_title}"
+  tmux set-option -t "$session" -g mouse on
+  tmux set-option -t "$session" bell-action none
+  tmux set-option -t "$session" visual-bell off
+
+  # ── Build grid ──
+  printf "  ${DIM}Building ${cols}x${rows} grid (${total} panes)...${RESET}\n"
+  for (( r=1; r<rows; r++ )); do
+    tmux split-window -v -t "$session:0.0" -c "$dir"
+  done
+  tmux select-layout -t "$session" even-vertical
+
+  for (( r=0; r<rows; r++ )); do
+    for (( c=1; c<cols; c++ )); do
+      tmux split-window -h -t "$session:0.$((r * cols))" -c "$dir"
+    done
+  done
+
+  sleep 2
+
+  # ── Name panes ──
+  printf "  ${DIM}Naming panes...${RESET}\n"
+  tmux select-pane -t "$session:0.0" -T "MGR Manager"
+  tmux select-pane -t "$session:0.$watchdog_pane" -T "WDG Watchdog"
+  local wnum=0
+  for (( i=1; i<total; i++ )); do
+    [[ $i -eq $watchdog_pane ]] && continue
+    (( wnum++ ))
+    tmux select-pane -t "$session:0.$i" -T "W${wnum} Worker ${wnum}"
+  done
+
+  # ── Launch Manager & Watchdog ──
+  printf "  ${DIM}Launching Manager & Watchdog...${RESET}\n"
+  tmux send-keys -t "$session:0.0" \
+    "claude --dangerously-skip-permissions --agent tmux-manager" Enter
+  sleep 0.5
+
+  (
+    sleep 10
+    worker_panes=""
+    for (( i=1; i<total; i++ )); do
+      [[ $i -eq $watchdog_pane ]] && continue
+      [[ -n "$worker_panes" ]] && worker_panes+=", "
+      worker_panes+="0.$i"
+    done
+    tmux send-keys -t "$session:0.0" \
+      "Team is online (project: ${name}, dir: $dir). You have $((total - 2)) workers in panes ${worker_panes}. Pane 0.$watchdog_pane is the Watchdog (auto-accepts prompts). Session: $session. All workers are idle and awaiting tasks. What should we work on?" Enter
+  ) &
+
+  tmux send-keys -t "$session:0.$watchdog_pane" \
+    "claude --dangerously-skip-permissions --model haiku --agent tmux-watchdog" Enter
+  sleep 0.5
+
+  (
+    sleep 12
+    watch_panes=""
+    for (( i=1; i<total; i++ )); do
+      [[ $i -eq $watchdog_pane ]] && continue
+      [[ -n "$watch_panes" ]] && watch_panes+=", "
+      watch_panes+="0.$i"
+    done
+    tmux send-keys -t "$session:0.$watchdog_pane" \
+      "Start monitoring session $session. Total panes: $total. Skip pane 0.0 (Manager) and 0.$watchdog_pane (yourself). Monitor panes ${watch_panes}." Enter
+  ) &
+
+  # ── Boot workers ──
+  printf "  ${DIM}Booting ${worker_count} workers...${RESET}\n"
+  local booted=0
+  for (( i=1; i<total; i++ )); do
+    [[ $i -eq $watchdog_pane ]] && continue
+    (( booted++ ))
+
+    local worker_prompt_file="${runtime_dir}/worker-system-prompt-${booted}.md"
+    cp "${runtime_dir}/worker-system-prompt.md" "$worker_prompt_file"
+    printf '\n\n## Identity\nYou are Worker %s in pane 0.%s of session %s.\n' "$booted" "$i" "$session" >> "$worker_prompt_file"
+
+    local worker_cmd="claude --dangerously-skip-permissions --model opus"
+    worker_cmd+=" --append-system-prompt-file ${worker_prompt_file}"
+    tmux send-keys -t "$session:0.$i" "$worker_cmd" Enter
+    sleep 0.3
+  done
+
+  printf "  ${SUCCESS}Team launched${RESET} — session ${BOLD}${session}${RESET} with ${worker_count} workers\n"
+}
+
+# ── E2E Test Runner ───────────────────────────────────────────────────
+
+run_test() {
+  local keep=false
+  local open=false
+  local grid="3x2"
+
+  # Parse flags
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --keep) keep=true; shift ;;
+      --open) open=true; shift ;;
+      --grid) grid="$2"; shift 2 ;;
+      [0-9]*x[0-9]*) grid="$1"; shift ;;
+      *)
+        printf "  ${ERROR}Unknown test flag: $1${RESET}\n"
+        return 1
+        ;;
+    esac
+  done
+
+  local test_id="e2e-test-$(date +%s)"
+  local test_root="/tmp/claude-team-test/${test_id}"
+  local project_dir="${test_root}/project"
+  local report_file="${test_root}/report.md"
+
+  printf '\n'
+  printf "  ${BRAND}Claude Team — E2E Test${RESET}\n"
+  printf '\n'
+  printf "  ${DIM}Test ID${RESET}    ${BOLD}${test_id}${RESET}\n"
+  printf "  ${DIM}Grid${RESET}       ${BOLD}${grid}${RESET}\n"
+  printf "  ${DIM}Sandbox${RESET}    ${BOLD}${project_dir}${RESET}\n"
+  printf "  ${DIM}Report${RESET}     ${BOLD}${report_file}${RESET}\n"
+  printf '\n'
+
+  # ── Step 1: Create sandbox project ──
+  printf "  ${DIM}[1/6]${RESET} Creating sandbox project...\n"
+  mkdir -p "${project_dir}/.claude/hooks"
+  cd "$project_dir"
+  git init -q
+  printf '# E2E Test Sandbox\n\nThis project was created by `ct test` for automated testing.\n' > README.md
+  printf 'E2E Test Sandbox - build whatever is requested\n' > CLAUDE.md
+
+  # Copy hooks and settings from the repo
+  local repo_dir
+  repo_dir="$(cat "$HOME/.claude/claude-team/repo-path")"
+  cp "${repo_dir}/.claude/hooks/status-hook.sh" "${project_dir}/.claude/hooks/status-hook.sh"
+  cp "${repo_dir}/.claude/settings.local.json" "${project_dir}/.claude/settings.local.json"
+
+  git add -A
+  git commit -q -m "Initial sandbox commit"
+  printf "  ${SUCCESS}Sandbox created${RESET}\n"
+
+  # ── Step 2: Register sandbox ──
+  printf "  ${DIM}[2/6]${RESET} Registering sandbox...\n"
+  local last8="${test_id: -8}"
+  local test_project_name="e2e-test-${last8}"
+  echo "${test_project_name}:${project_dir}" >> "$PROJECTS_FILE"
+  local session="ct-${test_project_name}"
+  printf "  ${SUCCESS}Registered${RESET} ${BOLD}${test_project_name}${RESET}\n"
+
+  # ── Step 3: Launch team ──
+  printf "  ${DIM}[3/6]${RESET} Launching team...\n"
+  launch_session_headless "$test_project_name" "$project_dir" "$grid"
+
+  # ── Step 4: Wait for boot ──
+  printf "  ${DIM}[4/6]${RESET} Waiting for boot (30s)...\n"
+  sleep 30
+  printf "  ${SUCCESS}Boot complete${RESET}\n"
+
+  # ── Step 5: Launch test driver ──
+  printf "  ${DIM}[5/6]${RESET} Launching test driver...\n"
+  local journey_file="${repo_dir}/tests/e2e/journey.md"
+  if [[ ! -f "$journey_file" ]]; then
+    printf "  ${ERROR}Journey file not found: ${journey_file}${RESET}\n"
+    return 1
+  fi
+  mkdir -p "${test_root}/observations"
+
+  printf "  ${DIM}Watch live:${RESET} tmux attach -t ${session}\n"
+  printf '\n'
+
+  claude --dangerously-skip-permissions --agent test-driver --model opus \
+    "Run the E2E test. Session: ${session}. Project name: ${test_project_name}. Project dir: ${project_dir}. Runtime dir: /tmp/claude-team/${test_project_name}. Journey file: ${journey_file}. Observations dir: ${test_root}/observations. Report file: ${report_file}. Test ID: ${test_id}"
+
+  # ── Step 6: Display results ──
+  printf '\n'
+  printf "  ${DIM}[6/6]${RESET} Results\n"
+  if [[ -f "$report_file" ]]; then
+    if grep -q "Result: PASS" "$report_file" 2>/dev/null; then
+      printf '\n'
+      printf "  ${SUCCESS}╔═══════════════════════════════════╗${RESET}\n"
+      printf "  ${SUCCESS}║            TEST PASSED            ║${RESET}\n"
+      printf "  ${SUCCESS}╚═══════════════════════════════════╝${RESET}\n"
+      printf '\n'
+    else
+      printf '\n'
+      printf "  ${ERROR}╔═══════════════════════════════════╗${RESET}\n"
+      printf "  ${ERROR}║            TEST FAILED            ║${RESET}\n"
+      printf "  ${ERROR}╚═══════════════════════════════════╝${RESET}\n"
+      printf '\n'
+    fi
+    printf "  ${DIM}Report:${RESET} ${BOLD}${report_file}${RESET}\n"
+  else
+    printf "  ${WARN}No report generated${RESET}\n"
+  fi
+
+  # ── Open if requested ──
+  if [[ "$open" == true ]]; then
+    open "${project_dir}/index.html" 2>/dev/null || true
+  fi
+
+  # ── Cleanup or keep ──
+  if [[ "$keep" == false ]]; then
+    printf "  ${DIM}Cleaning up...${RESET}\n"
+    tmux kill-session -t "$session" 2>/dev/null || true
+    sed -i '' "/^${test_project_name}:/d" "$PROJECTS_FILE"
+    rm -rf "$test_root"
+    printf "  ${SUCCESS}Cleaned up${RESET}\n"
+  else
+    printf '\n'
+    printf "  ${BOLD}Kept for inspection:${RESET}\n"
+    printf "    ${DIM}Session${RESET}   tmux attach -t ${session}\n"
+    printf "    ${DIM}Sandbox${RESET}   ${project_dir}\n"
+    printf "    ${DIM}Runtime${RESET}   /tmp/claude-team/${test_project_name}\n"
+    printf "    ${DIM}Report${RESET}    ${report_file}\n"
+    printf '\n'
+  fi
+}
+
 # ── Main Dispatch ─────────────────────────────────────────────────────
 
 grid=""
@@ -779,6 +1087,7 @@ case "${1:-}" in
     doctor     Check installation health and prerequisites
     remove     Unregister a project (by name, or current dir)
     uninstall  Remove all Claude Team files (keeps git repo and agent-memory)
+    test       Run E2E integration test (--keep, --open, --grid NxM)
     version    Show version and installation info
     --help     Show this help
 
@@ -828,6 +1137,11 @@ HELP
   uninstall)
     uninstall_system
     exit 0
+    ;;
+  test)
+    shift
+    run_test "$@"
+    exit $?
     ;;
   version|--version|-v)
     show_version
