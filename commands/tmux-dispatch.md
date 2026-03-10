@@ -23,6 +23,7 @@ This gives you:
 - `PROJECT_NAME` — human-readable project name
 - `WORKER_PANES` — list of worker pane IDs
 - `WATCHDOG_PANE` — the watchdog pane ID
+- `PASTE_SETTLE_MS` — settle time in ms between paste-buffer and Enter (default 500)
 
 **Always use `${SESSION_NAME}` in all tmux commands** — never hardcode "claude-team".
 
@@ -90,8 +91,33 @@ tmux load-buffer "$TASKFILE"
 tmux paste-buffer -t "$PANE"
 
 # 13. CRITICAL: exit copy-mode, sleep, then bare Enter — this is what actually submits
+#     The settle time between paste-buffer and Enter is configurable via PASTE_SETTLE_MS
+#     in session.env (default 500ms). For large prompts (>100 lines), it auto-scales to
+#     1.5-2s to ensure the full prompt is pasted before submission.
 tmux copy-mode -q -t "$PANE" 2>/dev/null
-sleep 0.5
+TASK_LINES=$(wc -l < "$TASKFILE" 2>/dev/null | tr -d ' ') || TASK_LINES=0
+if command -v bc >/dev/null 2>&1; then
+  SETTLE_S=$(echo "scale=2; ${PASTE_SETTLE_MS:-500} / 1000" | bc)
+  if [ "$TASK_LINES" -gt 200 ] 2>/dev/null; then
+    MIN_SETTLE="2.0"
+  elif [ "$TASK_LINES" -gt 100 ] 2>/dev/null; then
+    MIN_SETTLE="1.5"
+  else
+    MIN_SETTLE="$SETTLE_S"
+  fi
+  # Use the larger of configured settle time and auto-scaled minimum
+  SETTLE_S=$(echo "if ($MIN_SETTLE > $SETTLE_S) $MIN_SETTLE else $SETTLE_S" | bc)
+else
+  # Fallback if bc is not available
+  if [ "$TASK_LINES" -gt 200 ] 2>/dev/null; then
+    SETTLE_S="2.0"
+  elif [ "$TASK_LINES" -gt 100 ] 2>/dev/null; then
+    SETTLE_S="1.5"
+  else
+    SETTLE_S="0.5"
+  fi
+fi
+sleep $SETTLE_S
 tmux send-keys -t "$PANE" Enter
 
 # 14. Cleanup temp file
@@ -151,12 +177,12 @@ Each Bash call contains the full dispatch sequence (steps 1–15) for one worker
 
 ### Short tasks (< 200 chars, no special chars)
 
-Use the same dispatch sequence above (steps 1–8 are mandatory — every task gets a fresh Claude context), but you can skip the tmpfile (steps 9–12) and use `send-keys` directly after step 8. Steps 13–15 (submit + verify) are still mandatory.
+Use the same dispatch sequence above (steps 1–8 are mandatory — every task gets a fresh Claude context), but you can skip the tmpfile (steps 9–12) and use `send-keys` directly after step 8. Steps 13–15 (submit + verify) are still mandatory. The settle time (step 13) still applies but will use the default since short tasks are small — no auto-scaling kicks in.
 
 ### Rules
 
 1. **Never use `send-keys "" Enter`** — the empty string swallows the Enter keystroke
-2. **Always `sleep 0.5`** between `paste-buffer` and `send-keys Enter`
+2. **Always sleep between `paste-buffer` and `send-keys Enter`** — uses `PASTE_SETTLE_MS` from session.env (default 500ms), auto-scales for large prompts
 3. **Always exit copy-mode before every `paste-buffer` and `send-keys`** — copy-mode silently swallows all input
 4. **Always check idle first** — don't interrupt a working pane
 5. **Always verify after dispatch** — step 15 is mandatory, not optional

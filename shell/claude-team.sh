@@ -282,6 +282,7 @@ WORKER_COUNT=$worker_count
 WATCHDOG_PANE=$watchdog_pane
 WORKER_PANES=$worker_panes_csv
 RUNTIME_DIR=${runtime_dir}
+PASTE_SETTLE_MS=500
 MANIFEST
 
   # Generate shared worker system prompt (appended to Claude Code's default prompt)
@@ -824,6 +825,7 @@ WORKER_COUNT=$worker_count
 WATCHDOG_PANE=$watchdog_pane
 WORKER_PANES=$worker_panes_csv
 RUNTIME_DIR=${runtime_dir}
+PASTE_SETTLE_MS=500
 MANIFEST
 
   cat > "${runtime_dir}/worker-system-prompt.md" << 'WORKER_PROMPT'

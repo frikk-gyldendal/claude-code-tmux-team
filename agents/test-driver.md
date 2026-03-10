@@ -255,6 +255,8 @@ Run verification checks against the project directory. The specific checks depen
 
 Record each check as PASS or FAIL with details.
 
+5. **Visual rendering verification (optional):** See the "Visual Rendering Verification" section below for Chrome DevTools MCP-based checks.
+
 **Transition:** → **REPORTING**
 
 ---
@@ -345,6 +347,59 @@ Report: $REPORT_FILE
 ```
 
 Exit.
+
+## Visual Rendering Verification (Optional)
+
+When the test involves building web pages/sites, verify visual rendering using Chrome DevTools MCP:
+
+### Setup
+1. Ensure the site is being served (e.g., `python3 -m http.server 8765` in a worker pane)
+2. Use the Chrome DevTools MCP tools to navigate and verify
+
+### Verification Steps
+
+1. **Navigate to each page:**
+   ```
+   mcp__chrome-devtools__navigate_page url="http://localhost:PORT/page.html"
+   ```
+
+2. **Take a screenshot to verify rendering:**
+   ```
+   mcp__chrome-devtools__take_screenshot
+   ```
+
+3. **Check for console errors:**
+   ```
+   mcp__chrome-devtools__list_console_messages
+   ```
+   - No JavaScript errors should be present
+   - CSS warnings are acceptable but note them
+
+4. **Verify key elements exist:**
+   ```
+   mcp__chrome-devtools__evaluate_script script="document.querySelector('nav') !== null"
+   mcp__chrome-devtools__evaluate_script script="document.querySelector('footer') !== null"
+   ```
+
+5. **Check responsive rendering (optional):**
+   ```
+   mcp__chrome-devtools__resize_page width=375 height=812
+   mcp__chrome-devtools__take_screenshot
+   mcp__chrome-devtools__resize_page width=1920 height=1080
+   ```
+
+### What to Verify
+- Page loads without HTTP errors
+- No JavaScript console errors
+- Key structural elements are present (nav, header, footer, main content)
+- Page is not blank (screenshot shows actual content)
+- Color scheme matches spec if one was provided
+- Links between pages work (navigate and verify each)
+
+### Scoring
+- Visual verification is a bonus check — a test can still PASS on content/functionality alone
+- If visual checks reveal issues (blank page, broken layout, JS errors), note them in the test report as visual defects
+- A visual defect on an otherwise functional page is a PARTIAL PASS, not a FAIL
 
 ## Manager Input Detection
 
