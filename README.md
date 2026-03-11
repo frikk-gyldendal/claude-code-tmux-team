@@ -2,6 +2,35 @@
 
 # Doey
 
+```
+            .
+           ...      :-=++++==--:
+               .-***=-:.   ..:=+#%*:
+    .     :=----=.               .=%*=:
+    ..   -=-                     .::. :#*:
+      .+=    := .-+**+:        :#@%%@%- :*%=
+      *+.    @.*@**@@@@#.      %@=  *@@= :*=
+    :*:     .@=@=  *@@@@%      #@%+#@%#@  :-+
+   .%++      #*@@#%@@#%@@      :@@@@@*+@  :%#
+    %#       ==%@@@@@=+@+       :*%@@@#: :=*
+   .@--     -+=.+%@@@@*:            :.:--:-.
+   .@%#    ##*  ...:.:                 +=
+    .-@- .#*.   . ..                   :%
+      :+++%.:       .=.                 #+
+          =**        .*=                :@.
+       .   .@:+.       +#:               =%
+            :*:+:--.   =+%*.              *+
+                .- :-=:-+:+%=              #:
+                           .*%-            .%.
+                             :%#:        ...-#
+                               =%*.   =#@%@@@@*
+                                 =%+.-@@#=%@@@@-
+                                   -#*@@@@@@@@@.
+                                     .=#@@@@%+.
+```
+
+*Your loyal AI team assistant*
+
 **Run 10 Claude Code agents in parallel. One terminal.**
 
 Orchestrate a fleet of AI coding agents with a Manager that plans, Workers that execute,<br>and a Watchdog that keeps everything running — all inside tmux.
